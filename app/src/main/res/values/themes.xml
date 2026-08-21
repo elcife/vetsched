@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-
-    <style name="Theme.VETSCHED" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="colorPrimary">@color/vetsched_primary</item>
-        <item name="android:statusBarColor">@color/vetsched_background</item>
-        <item name="android:windowLightStatusBar">true</item>
-    </style>
-</resources>
