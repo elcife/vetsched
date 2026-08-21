@@ -1,3 +1,21 @@
 <resources>
     <string name="app_name">VETSCHED</string>
+    <string name="welcome_back">Welcome Back</string>
+    <string name="student_email">Student Email</string>
+    <string name="password">Password</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="login">Login</string>
+    <string name="dont_have_account">Don\'t have an account? </string>
+    <string name="register">Register</string>
+
+    <string name="create_account">Create Account</string>
+    <string name="full_name">Full Name</string>
+    <string name="student_id_number">Student ID Number</string>
+    <string name="already_have_account">Already have an account? </string>
+
+    <string name="email_hint">swu.phinma@phinmaed.com</string>
+    <string name="name_hint">e.g., Jan Rafael Donaldo</string>
+    <string name="id_hint">e.g., 05-2526-981919</string>
+    <string name="password_hint">........</string>
+    <string name="get_started">Get Started</string>
 </resources>
