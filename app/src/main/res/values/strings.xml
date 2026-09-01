@@ -9,12 +9,15 @@
     <string name="register">Register</string>
 
     <string name="create_account">Create Account</string>
-    <string name="full_name">Full Name</string>
+    <string name="first_name">First Name</string>
+    <string name="last_name">Last Name</string>
     <string name="student_id_number">Student ID Number</string>
+    <string name="confirm_password">Confirm Password</string>
     <string name="already_have_account">Already have an account? </string>
 
     <string name="email_hint">swu.phinma@phinmaed.com</string>
-    <string name="name_hint">e.g., Jan Rafael Donaldo</string>
+    <string name="first_name_hint">e.g., Jan Rafael</string>
+    <string name="last_name_hint">e.g., Donaldo</string>
     <string name="id_hint">e.g., 05-2526-981919</string>
     <string name="password_hint">........</string>
     <string name="get_started">Get Started</string>

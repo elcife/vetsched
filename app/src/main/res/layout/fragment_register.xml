@@ -36,30 +36,71 @@
             app:layout_constraintTop_toBottomOf="@+id/logoImage" />
 
         <!-- Fields -->
-        <TextView
-            android:id="@+id/labelFullName"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/layoutNames"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="32dp"
-            android:text="@string/full_name"
-            android:textColor="@color/vetsched_text_primary"
-            android:textStyle="bold"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/createAccountText" />
-
-        <EditText
-            android:id="@+id/etFullName"
-            android:layout_width="0dp"
-            android:layout_height="56dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_field_rounded"
-            android:hint="@string/name_hint"
-            android:inputType="textPersonName"
-            android:paddingHorizontal="16dp"
-            android:textSize="14sp"
+            android:baselineAligned="false"
+            android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/labelFullName" />
+            app:layout_constraintTop_toBottomOf="@+id/createAccountText">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/labelFirstName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/first_name"
+                    android:textColor="@color/vetsched_text_primary"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etFirstName"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_field_rounded"
+                    android:hint="@string/first_name_hint"
+                    android:inputType="textPersonName"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/labelLastName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/last_name"
+                    android:textColor="@color/vetsched_text_primary"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/etLastName"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_field_rounded"
+                    android:hint="@string/last_name_hint"
+                    android:inputType="textPersonName"
+                    android:paddingHorizontal="16dp"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             android:id="@+id/labelEmail"
@@ -70,7 +111,7 @@
             android:textColor="@color/vetsched_text_primary"
             android:textStyle="bold"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/etFullName" />
+            app:layout_constraintTop_toBottomOf="@+id/layoutNames" />
 
         <EditText
             android:id="@+id/etEmail"
@@ -103,8 +144,10 @@
             android:layout_height="56dp"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_field_rounded"
+            android:digits="0123456789-"
             android:hint="@string/id_hint"
-            android:inputType="text"
+            android:inputType="number"
+            android:maxLength="14"
             android:paddingHorizontal="16dp"
             android:textSize="14sp"
             app:layout_constraintEnd_toEndOf="parent"
@@ -122,18 +165,64 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/etIDNumber" />
 
-        <EditText
-            android:id="@+id/etPassword"
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilPassword"
             android:layout_width="0dp"
-            android:layout_height="56dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:background="@drawable/bg_field_rounded"
-            android:hint="@string/password_hint"
-            android:inputType="textPassword"
-            android:paddingHorizontal="16dp"
+            app:boxBackgroundMode="none"
+            app:hintEnabled="false"
+            app:passwordToggleEnabled="true"
+            app:passwordToggleTint="@color/vetsched_primary"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/labelPassword" />
+            app:layout_constraintTop_toBottomOf="@+id/labelPassword">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etPassword"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_field_rounded"
+                android:hint="@string/password_hint"
+                android:inputType="textPassword"
+                android:paddingHorizontal="16dp"
+                android:textSize="14sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:id="@+id/labelConfirmPassword"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/confirm_password"
+            android:textColor="@color/vetsched_text_primary"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tilPassword" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilConfirmPassword"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:boxBackgroundMode="none"
+            app:hintEnabled="false"
+            app:passwordToggleEnabled="true"
+            app:passwordToggleTint="@color/vetsched_primary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/labelConfirmPassword">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etConfirmPassword"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_field_rounded"
+                android:hint="@string/password_hint"
+                android:inputType="textPassword"
+                android:paddingHorizontal="16dp"
+                android:textSize="14sp" />
+        </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Button -->
         <Button
@@ -148,7 +237,7 @@
             app:backgroundTint="@null"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/etPassword" />
+            app:layout_constraintTop_toBottomOf="@+id/tilConfirmPassword" />
 
         <!-- Footer -->
         <LinearLayout
