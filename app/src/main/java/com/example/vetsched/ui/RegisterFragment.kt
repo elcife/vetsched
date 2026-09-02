@@ -88,10 +88,16 @@ class RegisterFragment : Fragment() {
                         Toast.makeText(requireContext(), "Account Created!", Toast.LENGTH_SHORT).show()
                         findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
                     } else {
-                        val authResponse = response.body()
+                        // Parse the error message even if it's an error response (like 409)
+                        val errorBody = response.errorBody()?.string()
+                        val authResponse = if (errorBody != null) {
+                            com.google.gson.Gson().fromJson(errorBody, AuthResponse::class.java)
+                        } else {
+                            response.body()
+                        }
+                        
                         val errorMsg = authResponse?.message ?: "Registration failed"
                         
-                        // Highlight specifically what's wrong based on server response
                         when (authResponse?.errorField) {
                             "student_id" -> binding.tilIDNumber.error = errorMsg
                             "email" -> binding.tilEmail.error = errorMsg

@@ -61,7 +61,14 @@ class LoginFragment : Fragment() {
                         }
                         findNavController().navigate(R.id.action_loginFragment_to_demoFragment, bundle)
                     } else {
-                        val errorMsg = response.body()?.message ?: "Login failed"
+                        val errorBody = response.errorBody()?.string()
+                        val authResponse = if (errorBody != null) {
+                            com.google.gson.Gson().fromJson(errorBody, AuthResponse::class.java)
+                        } else {
+                            response.body()
+                        }
+                        
+                        val errorMsg = authResponse?.message ?: "Login failed"
                         Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
