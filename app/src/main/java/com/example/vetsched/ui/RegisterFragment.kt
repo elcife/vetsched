@@ -35,12 +35,15 @@ class RegisterFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         setupStudentIDFormatting()
+        setupErrorClearing()
 
         binding.tvLogin.setOnClickListener {
             findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
         }
 
         binding.btnCreateAccount.setOnClickListener {
+            clearAllErrors()
+            
             val firstName = binding.etFirstName.text.toString().trim()
             val lastName = binding.etLastName.text.toString().trim()
             val email = binding.etEmail.text.toString().trim()
@@ -57,17 +60,17 @@ class RegisterFragment : Fragment() {
 
             // Check for complete ID format XX-XXXX-XXXXXX (14 chars)
             if (idNumber.length < 14) {
-                Toast.makeText(requireContext(), "Please enter a valid Student ID (XX-XXXX-XXXXXX)", Toast.LENGTH_SHORT).show()
+                binding.tilIDNumber.error = "Format: XX-XXXX-XXXXXX"
                 return@setOnClickListener
             }
 
             if (password.length < 10) {
-                Toast.makeText(requireContext(), "Password must be at least 10 characters long!", Toast.LENGTH_SHORT).show()
+                binding.tilPassword.error = "Minimum 10 characters"
                 return@setOnClickListener
             }
 
             if (password != confirmPassword) {
-                Toast.makeText(requireContext(), "Passwords do not match!", Toast.LENGTH_SHORT).show()
+                binding.tilConfirmPassword.error = "Passwords do not match"
                 return@setOnClickListener
             }
 
@@ -85,8 +88,15 @@ class RegisterFragment : Fragment() {
                         Toast.makeText(requireContext(), "Account Created!", Toast.LENGTH_SHORT).show()
                         findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
                     } else {
-                        val errorMsg = response.body()?.message ?: "Registration failed"
-                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        val authResponse = response.body()
+                        val errorMsg = authResponse?.message ?: "Registration failed"
+                        
+                        // Highlight specifically what's wrong based on server response
+                        when (authResponse?.errorField) {
+                            "student_id" -> binding.tilIDNumber.error = errorMsg
+                            "email" -> binding.tilEmail.error = errorMsg
+                            else -> Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
 
@@ -95,6 +105,28 @@ class RegisterFragment : Fragment() {
                 }
             })
         }
+    }
+
+    private fun clearAllErrors() {
+        binding.tilEmail.error = null
+        binding.tilIDNumber.error = null
+        binding.tilPassword.error = null
+        binding.tilConfirmPassword.error = null
+    }
+
+    private fun setupErrorClearing() {
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                clearAllErrors()
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        }
+        
+        binding.etEmail.addTextChangedListener(watcher)
+        binding.etIDNumber.addTextChangedListener(watcher)
+        binding.etPassword.addTextChangedListener(watcher)
+        binding.etConfirmPassword.addTextChangedListener(watcher)
     }
 
     private fun setupStudentIDFormatting() {

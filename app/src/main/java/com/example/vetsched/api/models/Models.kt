@@ -12,5 +12,6 @@ data class User(
 data class AuthResponse(
     val success: Boolean,
     val message: String,
+    @SerializedName("error_field") val errorField: String? = null,
     val user: User? = null
 )
