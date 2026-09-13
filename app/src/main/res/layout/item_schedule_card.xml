@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_schedule_card"
-    android:padding="16dp">
+    android:padding="12dp">
 
     <TextView
         android:id="@+id/tvTimeRange"
@@ -12,57 +12,89 @@
         android:layout_height="wrap_content"
         android:text="10:00-12:00"
         android:textColor="@color/vetsched_text_primary"
-        android:textSize="16sp"
+        android:textSize="14sp"
         android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/tvSection"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_date_unselected"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="4dp"
-        android:text="Sec A"
-        android:textColor="@color/vetsched_text_primary"
-        android:textSize="12sp"
-        app:layout_constraintBottom_toBottomOf="@id/tvTimeRange"
+    <ImageView
+        android:id="@+id/btnRemove"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:src="@drawable/ic_close"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/tvTimeRange" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/vetsched_text_hint" />
 
     <TextView
         android:id="@+id/tvCourseName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="2"
         android:text="**************************"
         android:textColor="@color/vetsched_text_primary"
-        android:textSize="14sp"
+        android:textSize="13sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvTimeRange" />
 
     <ImageView
         android:id="@+id/ivLocation"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:layout_marginTop="8dp"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_marginTop="6dp"
         android:src="@drawable/ic_location"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvCourseName" />
+        app:layout_constraintTop_toBottomOf="@id/tvCourseName"
+        app:tint="@color/vetsched_text_hint" />
 
     <TextView
         android:id="@+id/tvLocation"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
         android:text="VM-Lab 2"
         android:textColor="@color/vetsched_text_hint"
-        android:textSize="14sp"
+        android:textSize="11sp"
+        app:layout_constrainedWidth="true"
         app:layout_constraintBottom_toBottomOf="@id/ivLocation"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/tvInstructorMasked"
+        app:layout_constraintHorizontal_bias="0"
+        app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toEndOf="@id/ivLocation"
         app:layout_constraintTop_toTopOf="@id/ivLocation" />
+
+    <TextView
+        android:id="@+id/tvInstructorMasked"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="• ************"
+        android:textColor="@color/vetsched_text_hint"
+        android:textSize="11sp"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintBottom_toBottomOf="@id/tvLocation"
+        app:layout_constraintEnd_toStartOf="@id/tvSection"
+        app:layout_constraintStart_toEndOf="@id/tvLocation"
+        app:layout_constraintTop_toTopOf="@id/tvLocation" />
+
+    <TextView
+        android:id="@+id/tvSection"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_date_unselected"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="2dp"
+        android:text="Sec A"
+        android:textColor="@color/vetsched_text_primary"
+        android:textSize="10sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
