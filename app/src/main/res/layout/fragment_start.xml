@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:background="@color/vetsched_background">
 
-    <!-- Background Paws (Decoration) -->
     <ImageView
         android:layout_width="60dp"
         android:layout_height="60dp"
@@ -36,7 +35,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Center Content -->
     <ImageView
         android:id="@+id/logoImage"
         android:layout_width="120dp"
@@ -62,7 +60,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/logoImage" />
 
-    <!-- Bottom Button -->
     <Button
         android:id="@+id/btnGetStarted"
         android:layout_width="0dp"
@@ -80,7 +77,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Extra Bottom Decoration -->
     <ImageView
         android:layout_width="40dp"
         android:layout_height="40dp"

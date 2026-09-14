@@ -13,6 +13,7 @@ import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.databinding.FragmentRegisterBinding
+import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -51,14 +52,12 @@ class RegisterFragment : Fragment() {
             val password = binding.etPassword.text.toString()
             val confirmPassword = binding.etConfirmPassword.text.toString()
 
-            // Strict Validation
             if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() || 
                 idNumber.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
                 Toast.makeText(requireContext(), "All fields are required!", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            // Check for complete ID format XX-XXXX-XXXXXX (14 chars)
             if (idNumber.length < 14) {
                 binding.tilIDNumber.error = "Format: XX-XXXX-XXXXXX"
                 return@setOnClickListener
@@ -88,10 +87,9 @@ class RegisterFragment : Fragment() {
                         Toast.makeText(requireContext(), "Account Created!", Toast.LENGTH_SHORT).show()
                         findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
                     } else {
-                        // Parse the error message even if it's an error response (like 409)
                         val errorBody = response.errorBody()?.string()
                         val authResponse = if (errorBody != null) {
-                            com.google.gson.Gson().fromJson(errorBody, AuthResponse::class.java)
+                            Gson().fromJson(errorBody, AuthResponse::class.java)
                         } else {
                             response.body()
                         }
@@ -152,7 +150,6 @@ class RegisterFragment : Fragment() {
                 
                 for (i in digits.indices) {
                     sb.append(digits[i])
-                    // Add dash after 2nd and 6th digit
                     if ((i == 1 || i == 5) && i != digits.length - 1) {
                         sb.append("-")
                     }

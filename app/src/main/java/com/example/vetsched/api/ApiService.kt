@@ -11,4 +11,10 @@ interface ApiService {
 
     @POST("add_account.php")
     fun register(@Body params: Map<String, String>): Call<AuthResponse>
+
+    @POST("change_password.php")
+    fun changePassword(@Body params: Map<String, String>): Call<AuthResponse>
+
+    @POST("delete_account.php")
+    fun deleteAccount(@Body params: Map<String, String>): Call<AuthResponse>
 }

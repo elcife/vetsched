@@ -12,4 +12,7 @@
     <color name="vetsched_field_bg">#F0F2ED</color>
     <color name="vetsched_text_primary">#1A1A1A</color>
     <color name="vetsched_text_hint">#9E9E9E</color>
+    <color name="vetsched_card_bg">#F1F4EE</color>
+    <color name="vetsched_divider">#E0E0E0</color>
+    <color name="vetsched_unselected_tab">#F5F5F5</color>
 </resources>

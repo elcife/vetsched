@@ -1,5 +1,6 @@
 package com.example.vetsched.ui
 
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -11,6 +12,7 @@ import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.databinding.FragmentLoginBinding
+import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -56,14 +58,25 @@ class LoginFragment : Fragment() {
                         Toast.makeText(requireContext(), "Login successful!", Toast.LENGTH_SHORT).show()
                         
                         val user = response.body()?.user
-                        val bundle = Bundle().apply {
-                            putString("userName", "${user?.firstName} ${user?.lastName}")
+                        val fullName = "${user?.firstName} ${user?.lastName}"
+                        val emailSaved = user?.email ?: email
+                        
+                        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+                        with(sharedPref.edit()) {
+                            putBoolean("isLoggedIn", true)
+                            putString("userName", fullName)
+                            putString("userEmail", emailSaved)
+                            apply()
                         }
-                        findNavController().navigate(R.id.action_loginFragment_to_demoFragment, bundle)
+
+                        val bundle = Bundle().apply {
+                            putString("userName", fullName)
+                        }
+                        findNavController().navigate(R.id.action_loginFragment_to_scheduleFragment, bundle)
                     } else {
                         val errorBody = response.errorBody()?.string()
                         val authResponse = if (errorBody != null) {
-                            com.google.gson.Gson().fromJson(errorBody, AuthResponse::class.java)
+                            Gson().fromJson(errorBody, AuthResponse::class.java)
                         } else {
                             response.body()
                         }

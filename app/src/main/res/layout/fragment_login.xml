@@ -12,7 +12,6 @@
         android:layout_height="wrap_content"
         android:padding="24dp">
 
-    <!-- Logo and Welcome -->
     <ImageView
         android:id="@+id/logoImage"
         android:layout_width="80dp"
@@ -36,7 +35,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/logoImage" />
 
-    <!-- Input Fields -->
     <TextView
         android:id="@+id/labelEmail"
         android:layout_width="wrap_content"
@@ -109,7 +107,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tilPassword" />
 
-    <!-- Button -->
     <Button
         android:id="@+id/btnLogin"
         android:layout_width="0dp"
@@ -124,7 +121,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/tvForgotPassword" />
 
-    <!-- Footer -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
