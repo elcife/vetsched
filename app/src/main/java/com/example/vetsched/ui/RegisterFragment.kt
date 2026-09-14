@@ -35,7 +35,7 @@ class RegisterFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        setupStudentIDFormatting()
+        setupYearLevelDropdown()
         setupErrorClearing()
 
         binding.tvLogin.setOnClickListener {
@@ -49,17 +49,37 @@ class RegisterFragment : Fragment() {
             val lastName = binding.etLastName.text.toString().trim()
             val email = binding.etEmail.text.toString().trim()
             val idNumber = binding.etIDNumber.text.toString().trim()
+            
+            // Ignore dashes for validation and submission
+            val studentID = idNumber.replace("-", "")
+            
+            val yearLevelText = binding.etYearLevel.text.toString().trim()
             val password = binding.etPassword.text.toString()
             val confirmPassword = binding.etConfirmPassword.text.toString()
 
             if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() || 
-                idNumber.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+                idNumber.isEmpty() || yearLevelText.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
                 Toast.makeText(requireContext(), "All fields are required!", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            if (idNumber.length < 14) {
-                binding.tilIDNumber.error = "Format: XX-XXXX-XXXXXX"
+            val yearLevelInt = when (yearLevelText) {
+                "1st Year" -> 1
+                "2nd Year" -> 2
+                "3rd Year" -> 3
+                "4th Year" -> 4
+                "5th Year" -> 5
+                else -> 0
+            }
+
+            if (yearLevelInt == 0) {
+                binding.tilYearLevel.error = "Please select a year level"
+                return@setOnClickListener
+            }
+
+            // Validate cleaned ID length: Minimum 9, Maximum 12
+            if (studentID.length !in 9..12 || !studentID.all { it.isDigit() }) {
+                binding.tilIDNumber.error = "Invalid ID format (9-12 digits required)"
                 return@setOnClickListener
             }
 
@@ -77,7 +97,8 @@ class RegisterFragment : Fragment() {
                 "first_name" to firstName,
                 "last_name" to lastName,
                 "email" to email,
-                "student_id" to idNumber,
+                "student_id" to studentID,
+                "year_level" to yearLevelInt.toString(),
                 "password" to password
             )
 
@@ -99,6 +120,7 @@ class RegisterFragment : Fragment() {
                         when (authResponse?.errorField) {
                             "student_id" -> binding.tilIDNumber.error = errorMsg
                             "email" -> binding.tilEmail.error = errorMsg
+                            "year_level" -> binding.tilYearLevel.error = errorMsg
                             else -> Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -111,9 +133,24 @@ class RegisterFragment : Fragment() {
         }
     }
 
+    private fun setupYearLevelDropdown() {
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year")
+        
+        binding.etYearLevel.setOnClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Select Year Level")
+                .setItems(yearLevels) { _, which ->
+                    binding.etYearLevel.setText(yearLevels[which])
+                    clearAllErrors()
+                }
+                .show()
+        }
+    }
+
     private fun clearAllErrors() {
         binding.tilEmail.error = null
         binding.tilIDNumber.error = null
+        binding.tilYearLevel.error = null
         binding.tilPassword.error = null
         binding.tilConfirmPassword.error = null
     }
@@ -129,41 +166,9 @@ class RegisterFragment : Fragment() {
         
         binding.etEmail.addTextChangedListener(watcher)
         binding.etIDNumber.addTextChangedListener(watcher)
+        binding.etYearLevel.addTextChangedListener(watcher)
         binding.etPassword.addTextChangedListener(watcher)
         binding.etConfirmPassword.addTextChangedListener(watcher)
-    }
-
-    private fun setupStudentIDFormatting() {
-        binding.etIDNumber.addTextChangedListener(object : TextWatcher {
-            private var isUpdating = false
-
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-
-            override fun afterTextChanged(s: Editable?) {
-                if (isUpdating) return
-                
-                isUpdating = true
-                
-                val digits = s.toString().replace("-", "")
-                val sb = StringBuilder()
-                
-                for (i in digits.indices) {
-                    sb.append(digits[i])
-                    if ((i == 1 || i == 5) && i != digits.length - 1) {
-                        sb.append("-")
-                    }
-                }
-                
-                val result = sb.toString()
-                if (result != s.toString()) {
-                    binding.etIDNumber.setText(result)
-                    binding.etIDNumber.setSelection(result.length)
-                }
-                
-                isUpdating = false
-            }
-        })
     }
 
     override fun onDestroyView() {

@@ -163,10 +163,45 @@
                 android:background="@drawable/bg_field_rounded"
                 android:digits="0123456789-"
                 android:hint="@string/id_hint"
-                android:inputType="number"
-                android:maxLength="14"
+                android:inputType="text"
                 android:paddingHorizontal="16dp"
                 android:textSize="14sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:id="@+id/labelYearLevel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/year_level"
+            android:textColor="@color/vetsched_text_primary"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tilIDNumber" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilYearLevel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:boxBackgroundMode="none"
+            app:hintEnabled="false"
+            app:endIconMode="none"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/labelYearLevel">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etYearLevel"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_field_rounded"
+                android:hint="@string/select_year_level"
+                android:inputType="none"
+                android:paddingHorizontal="16dp"
+                android:textSize="14sp"
+                android:focusable="false"
+                android:clickable="true" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <TextView
@@ -178,7 +213,7 @@
             android:textColor="@color/vetsched_text_primary"
             android:textStyle="bold"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/tilIDNumber" />
+            app:layout_constraintTop_toBottomOf="@+id/tilYearLevel" />
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilPassword"

@@ -17,4 +17,7 @@ interface ApiService {
 
     @POST("delete_account.php")
     fun deleteAccount(@Body params: Map<String, String>): Call<AuthResponse>
+
+    @POST("update_year_level.php")
+    fun updateYearLevel(@Body params: Map<String, String>): Call<AuthResponse>
 }

@@ -6,7 +6,8 @@ data class User(
     @SerializedName("student_id") val studentId: String,
     @SerializedName("first_name") val firstName: String,
     @SerializedName("last_name") val lastName: String,
-    val email: String
+    val email: String,
+    @SerializedName("year_level") val yearLevel: Int? = null
 )
 
 data class AuthResponse(

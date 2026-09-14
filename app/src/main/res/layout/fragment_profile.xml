@@ -61,13 +61,13 @@
         app:layout_constraintTop_toBottomOf="@id/btnLogout" />
 
     <Button
-        android:id="@+id/btnDeleteAccount"
+        android:id="@+id/btnChangeYearLevel"
         android:layout_width="0dp"
         android:layout_height="56dp"
         android:layout_marginHorizontal="24dp"
         android:layout_marginTop="16dp"
-        android:backgroundTint="#FF4B4B"
-        android:text="Delete Account"
+        android:backgroundTint="@color/vetsched_primary"
+        android:text="Change Year Level"
         android:textAllCaps="false"
         android:textColor="@color/white"
         app:cornerRadius="28dp"

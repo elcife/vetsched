@@ -97,4 +97,16 @@
             app:destination="@id/loginFragment" />
     </fragment>
 
+    <fragment
+        android:id="@+id/demoFragment"
+        android:name="com.example.vetsched.ui.DemoFragment"
+        android:label="DemoFragment"
+        tools:layout="@layout/fragment_demo">
+        <action
+            android:id="@+id/action_demoFragment_to_loginFragment"
+            app:destination="@id/loginFragment"
+            app:popUpTo="@id/nav_graph"
+            app:popUpToInclusive="true" />
+    </fragment>
+
 </navigation>

@@ -62,9 +62,61 @@ class ProfileFragment : Fragment() {
             showChangePasswordDialog()
         }
 
-        binding.btnDeleteAccount.setOnClickListener {
-            showDeleteAccountWarning()
+        binding.btnChangeYearLevel.setOnClickListener {
+            showChangeYearLevelWarning()
         }
+    }
+
+    private fun showChangeYearLevelWarning() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Change Year Level")
+            .setMessage("Are you sure, Changing year level may affect your schedule and erase all your schedule data.")
+            .setPositiveButton("Yes") { _, _ ->
+                showYearLevelSelectionDialog()
+            }
+            .setNegativeButton("No", null)
+            .show()
+    }
+
+    private fun showYearLevelSelectionDialog() {
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year")
+        AlertDialog.Builder(requireContext())
+            .setTitle("Select New Year Level")
+            .setItems(yearLevels) { _, which ->
+                val yearLevelInt = which + 1
+                updateYearLevelOnServer(yearLevelInt.toString())
+            }
+            .show()
+    }
+
+    private fun updateYearLevelOnServer(yearLevel: String) {
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val userEmail = sharedPref.getString("userEmail", null)
+
+        if (userEmail == null) {
+            Toast.makeText(requireContext(), "Error: User email not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val params = mapOf(
+            "email" to userEmail,
+            "year_level" to yearLevel
+        )
+
+        RetrofitClient.instance.updateYearLevel(params).enqueue(object : Callback<AuthResponse> {
+            override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Toast.makeText(requireContext(), "Year level updated successfully!", Toast.LENGTH_SHORT).show()
+                } else {
+                    val msg = response.body()?.message ?: "Update failed"
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
+                Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
     }
 
     private fun showChangePasswordDialog() {
@@ -133,47 +185,6 @@ class ProfileFragment : Fragment() {
         }
         builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
         builder.show()
-    }
-
-    private fun showDeleteAccountWarning() {
-        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val userEmail = sharedPref.getString("userEmail", null)
-
-        if (userEmail == null) {
-            Toast.makeText(requireContext(), "Error: User email not found", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Delete Account")
-            .setMessage("WARNING: This action is permanent and cannot be undone. Are you sure you want to delete your account?")
-            .setPositiveButton("Yes, Delete") { _, _ ->
-                val params = mapOf("email" to userEmail)
-                RetrofitClient.instance.deleteAccount(params).enqueue(object : Callback<AuthResponse> {
-                    override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
-                        if (response.isSuccessful && response.body()?.success == true) {
-                            with(sharedPref.edit()) {
-                                putBoolean("isLoggedIn", false)
-                                putString("userName", null)
-                                putString("userEmail", null)
-                                apply()
-                            }
-                            Toast.makeText(requireContext(), "Account deleted successfully", Toast.LENGTH_SHORT).show()
-                            findNavController().navigate(R.id.action_profileFragment_to_startFragment)
-                        } else {
-                            val msg = response.body()?.message ?: "Deletion failed"
-                            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-
-                    override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                        Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
-                    }
-                })
-            }
-            .setNegativeButton("No, Keep it", null)
-            .setIcon(android.R.drawable.ic_dialog_alert)
-            .show()
     }
 
     override fun onDestroyView() {
