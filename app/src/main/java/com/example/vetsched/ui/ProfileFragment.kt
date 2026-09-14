@@ -105,16 +105,19 @@ class ProfileFragment : Fragment() {
 
         RetrofitClient.instance.updateYearLevel(params).enqueue(object : Callback<AuthResponse> {
             override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                if (!isAdded || _binding == null) return
+
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Toast.makeText(requireContext(), "Year level updated successfully!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Year level updated successfully!", Toast.LENGTH_SHORT).show()
                 } else {
                     val msg = response.body()?.message ?: "Update failed"
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
             }
 
             override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                if (!isAdded || _binding == null) return
+                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
             }
         })
     }
@@ -169,17 +172,20 @@ class ProfileFragment : Fragment() {
 
             RetrofitClient.instance.changePassword(params).enqueue(object : Callback<AuthResponse> {
                 override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                    if (!isAdded || _binding == null) return
+
                     if (response.isSuccessful && response.body()?.success == true) {
-                        Toast.makeText(requireContext(), "Password updated successfully!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Password updated successfully!", Toast.LENGTH_SHORT).show()
                         dialog.dismiss()
                     } else {
                         val msg = response.body()?.message ?: "Update failed"
-                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     }
                 }
 
                 override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                    Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                    if (!isAdded || _binding == null) return
+                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
                 }
             })
         }

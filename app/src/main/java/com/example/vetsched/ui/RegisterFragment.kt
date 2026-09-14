@@ -104,30 +104,37 @@ class RegisterFragment : Fragment() {
 
             RetrofitClient.instance.register(params).enqueue(object : Callback<AuthResponse> {
                 override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                    if (!isAdded || _binding == null) return
+
                     if (response.isSuccessful && response.body()?.success == true) {
-                        Toast.makeText(requireContext(), "Account Created!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Account Created!", Toast.LENGTH_SHORT).show()
                         findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
                     } else {
                         val errorBody = response.errorBody()?.string()
-                        val authResponse = if (errorBody != null) {
-                            Gson().fromJson(errorBody, AuthResponse::class.java)
-                        } else {
-                            response.body()
+                        val authResponse = try {
+                            if (errorBody != null) {
+                                Gson().fromJson(errorBody, AuthResponse::class.java)
+                            } else {
+                                response.body()
+                            }
+                        } catch (e: Exception) {
+                            null
                         }
                         
                         val errorMsg = authResponse?.message ?: "Registration failed"
                         
                         when (authResponse?.errorField) {
-                            "student_id" -> binding.tilIDNumber.error = errorMsg
-                            "email" -> binding.tilEmail.error = errorMsg
-                            "year_level" -> binding.tilYearLevel.error = errorMsg
-                            else -> Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                            "student_id" -> _binding?.tilIDNumber?.error = errorMsg
+                            "email" -> _binding?.tilEmail?.error = errorMsg
+                            "year_level" -> _binding?.tilYearLevel?.error = errorMsg
+                            else -> Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
 
                 override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                    Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                    if (!isAdded || _binding == null) return
+                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
                 }
             })
         }
