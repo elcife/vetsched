@@ -54,8 +54,10 @@ class LoginFragment : Fragment() {
 
             RetrofitClient.instance.login(params).enqueue(object : Callback<AuthResponse> {
                 override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                    if (!isAdded || _binding == null) return
+
                     if (response.isSuccessful && response.body()?.success == true) {
-                        Toast.makeText(requireContext(), "Login successful!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
                         
                         val user = response.body()?.user
                         val fullName = "${user?.firstName} ${user?.lastName}"
@@ -75,19 +77,24 @@ class LoginFragment : Fragment() {
                         findNavController().navigate(R.id.action_loginFragment_to_scheduleFragment, bundle)
                     } else {
                         val errorBody = response.errorBody()?.string()
-                        val authResponse = if (errorBody != null) {
-                            Gson().fromJson(errorBody, AuthResponse::class.java)
-                        } else {
-                            response.body()
+                        val authResponse = try {
+                            if (errorBody != null) {
+                                Gson().fromJson(errorBody, AuthResponse::class.java)
+                            } else {
+                                response.body()
+                            }
+                        } catch (e: Exception) {
+                            null
                         }
                         
                         val errorMsg = authResponse?.message ?: "Login failed"
-                        Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
 
                 override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                    Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                    if (!isAdded || _binding == null) return
+                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
                 }
             })
         }
