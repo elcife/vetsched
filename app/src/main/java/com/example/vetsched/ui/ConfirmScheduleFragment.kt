@@ -23,7 +23,7 @@ class ConfirmScheduleFragment : Fragment() {
     private var _binding: FragmentConfirmScheduleBinding? = null
     private val binding get() = _binding!!
 
-    private val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+    private val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -66,7 +66,7 @@ class ConfirmScheduleFragment : Fragment() {
     private fun setupTabs() {
         val tabLayouts = listOf(
             binding.tabMon, binding.tabTue, binding.tabWed,
-            binding.tabThu, binding.tabFri, binding.tabSat
+            binding.tabThu, binding.tabFri, binding.tabSat, binding.tabSun
         )
 
         tabLayouts.forEachIndexed { index, layout ->
@@ -82,33 +82,37 @@ class ConfirmScheduleFragment : Fragment() {
 
         val tabLayouts = listOf(
             binding.tabMon, binding.tabTue, binding.tabWed,
-            binding.tabThu, binding.tabFri, binding.tabSat
+            binding.tabThu, binding.tabFri, binding.tabSat, binding.tabSun
         )
         val labelViews = listOf(
             binding.tvMonLabel, binding.tvTueLabel, binding.tvWedLabel,
-            binding.tvThuLabel, binding.tvFriLabel, binding.tvSatLabel
+            binding.tvThuLabel, binding.tvFriLabel, binding.tvSatLabel, binding.tvSunLabel
         )
         val dateViews = listOf(
             binding.tvMonDate, binding.tvTueDate, binding.tvWedDate,
-            binding.tvThuDate, binding.tvFriDate, binding.tvSatDate
+            binding.tvThuDate, binding.tvFriDate, binding.tvSatDate, binding.tvSunDate
         )
 
         tabLayouts.forEachIndexed { index, layout ->
-            if (index == selectedPosition) {
-                layout.setBackgroundResource(R.drawable.bg_date_selected)
-                labelViews[index].setTextColor(whiteColor)
-                dateViews[index].setTextColor(whiteColor)
-            } else {
-                layout.setBackgroundResource(R.drawable.bg_date_unselected)
-                labelViews[index].setTextColor(textPrimaryColor)
-                dateViews[index].setTextColor(textPrimaryColor)
+            if (index < tabLayouts.size) {
+                if (index == selectedPosition) {
+                    layout.setBackgroundResource(R.drawable.bg_date_selected)
+                    labelViews[index].setTextColor(whiteColor)
+                    dateViews[index].setTextColor(whiteColor)
+                } else {
+                    layout.setBackgroundResource(R.drawable.bg_date_unselected)
+                    labelViews[index].setTextColor(textPrimaryColor)
+                    dateViews[index].setTextColor(textPrimaryColor)
+                }
             }
         }
 
-        binding.dateSelector.post {
-            val selectedTab = tabLayouts[selectedPosition]
-            val scrollX = selectedTab.left - (binding.dateSelector.width - selectedTab.width) / 2
-            binding.dateSelector.smoothScrollTo(scrollX, 0)
+        if (selectedPosition < tabLayouts.size) {
+            binding.dateSelector.post {
+                val selectedTab = tabLayouts[selectedPosition]
+                val scrollX = selectedTab.left - (binding.dateSelector.width - selectedTab.width) / 2
+                binding.dateSelector.smoothScrollTo(scrollX, 0)
+            }
         }
     }
 
@@ -152,7 +156,7 @@ class ConfirmScheduleFragment : Fragment() {
                 cardBinding.tvSection.text = course.section
                 cardBinding.tvCourseName.text = course.courseName
                 cardBinding.tvLocation.text = course.room
-                cardBinding.tvInstructorMasked.text = "• ************"
+                cardBinding.tvInstructor.text = course.instructor
                 
                 cardBinding.btnRemove.visibility = View.GONE
 

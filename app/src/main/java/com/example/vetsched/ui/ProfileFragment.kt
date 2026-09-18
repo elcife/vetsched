@@ -15,6 +15,7 @@ import androidx.navigation.fragment.findNavController
 import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
+import com.example.vetsched.data.CourseRepository
 import com.example.vetsched.databinding.FragmentProfileBinding
 import retrofit2.Call
 import retrofit2.Callback
@@ -65,6 +66,22 @@ class ProfileFragment : Fragment() {
         binding.btnChangeYearLevel.setOnClickListener {
             showChangeYearLevelWarning()
         }
+
+        binding.btnResetSchedule.setOnClickListener {
+            showResetScheduleWarning()
+        }
+    }
+
+    private fun showResetScheduleWarning() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Reset Schedule")
+            .setMessage("Are you sure you want to clear your entire schedule? This cannot be undone.")
+            .setPositiveButton("Clear All") { _, _ ->
+                CourseRepository.clear(requireContext())
+                Toast.makeText(requireContext(), "Schedule cleared", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showChangeYearLevelWarning() {
@@ -108,6 +125,7 @@ class ProfileFragment : Fragment() {
                 if (!isAdded || _binding == null) return
 
                 if (response.isSuccessful && response.body()?.success == true) {
+                    sharedPref.edit().putInt("userYearLevel", yearLevel.toInt()).apply()
                     Toast.makeText(context, "Year level updated successfully!", Toast.LENGTH_SHORT).show()
                 } else {
                     val msg = response.body()?.message ?: "Update failed"

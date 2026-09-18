@@ -33,9 +33,10 @@
         android:layout_marginTop="4dp"
         android:ellipsize="end"
         android:maxLines="2"
-        android:text="**************************"
+        android:text="Course Name"
         android:textColor="@color/vetsched_text_primary"
         android:textSize="13sp"
+        android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvTimeRange" />
@@ -57,32 +58,44 @@
         android:layout_marginStart="4dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:text="VM-Lab 2"
+        android:text="Location"
         android:textColor="@color/vetsched_text_hint"
         android:textSize="11sp"
         app:layout_constrainedWidth="true"
         app:layout_constraintBottom_toBottomOf="@id/ivLocation"
-        app:layout_constraintEnd_toStartOf="@id/tvInstructorMasked"
+        app:layout_constraintEnd_toStartOf="@id/ivInstructor"
         app:layout_constraintHorizontal_bias="0"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toEndOf="@id/ivLocation"
         app:layout_constraintTop_toTopOf="@id/ivLocation" />
 
+    <ImageView
+        android:id="@+id/ivInstructor"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/ic_profile"
+        app:layout_constraintBottom_toBottomOf="@id/tvLocation"
+        app:layout_constraintEnd_toStartOf="@id/tvInstructor"
+        app:layout_constraintStart_toEndOf="@id/tvLocation"
+        app:layout_constraintTop_toTopOf="@id/tvLocation"
+        app:tint="@color/vetsched_text_hint" />
+
     <TextView
-        android:id="@+id/tvInstructorMasked"
+        android:id="@+id/tvInstructor"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="4dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:text="• ************"
+        android:text="Instructor"
         android:textColor="@color/vetsched_text_hint"
         android:textSize="11sp"
         app:layout_constrainedWidth="true"
-        app:layout_constraintBottom_toBottomOf="@id/tvLocation"
+        app:layout_constraintBottom_toBottomOf="@id/ivInstructor"
         app:layout_constraintEnd_toStartOf="@id/tvSection"
-        app:layout_constraintStart_toEndOf="@id/tvLocation"
-        app:layout_constraintTop_toTopOf="@id/tvLocation" />
+        app:layout_constraintStart_toEndOf="@id/ivInstructor"
+        app:layout_constraintTop_toTopOf="@id/ivInstructor" />
 
     <TextView
         android:id="@+id/tvSection"
@@ -91,7 +104,7 @@
         android:background="@drawable/bg_date_unselected"
         android:paddingHorizontal="8dp"
         android:paddingVertical="2dp"
-        android:text="Sec A"
+        android:text="Section"
         android:textColor="@color/vetsched_text_primary"
         android:textSize="10sp"
         app:layout_constraintBottom_toBottomOf="parent"

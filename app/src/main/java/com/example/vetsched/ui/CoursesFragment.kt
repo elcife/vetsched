@@ -1,9 +1,11 @@
 package com.example.vetsched.ui
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,20 +15,18 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.vetsched.R
+import com.example.vetsched.api.RetrofitClient
+import com.example.vetsched.api.models.Subject
+import com.example.vetsched.api.models.Section
 import com.example.vetsched.data.CourseRepository
 import com.example.vetsched.data.EnrolledCourse
 import com.example.vetsched.databinding.FragmentCoursesBinding
 import com.example.vetsched.databinding.ItemCourseBinding
-
-data class CourseModel(
-    val code: String,
-    val name: String,
-    val day: String,
-    val timeA: String,
-    val timeB: String,
-    val roomA: String,
-    val roomB: String
-)
+import com.example.vetsched.databinding.ItemCourseSectionBinding
+import com.google.gson.Gson
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class CoursesFragment : Fragment() {
 
@@ -35,18 +35,9 @@ class CoursesFragment : Fragment() {
 
     private var currentQuery = ""
     private var expandedPosition = -1
-
-    private val allCourses = listOf(
-        CourseModel("VETMED* 101", "**************************", "Monday", "8:00 - 9:30 AM", "1:00 - 2:30 PM", "VM-201", "VM-305"),
-        CourseModel("****** 201", "**************************", "Tuesday", "10:00 - 12:00 PM", "3:00 - 5:00 PM", "VM-Lab 2", "VM-202"),
-        CourseModel("******** 301", "**************************", "Wednesday", "9:00 - 11:00 AM", "2:00 - 4:00 PM", "VM-Lab 1", "VM-301"),
-        CourseModel("******** 401", "**************************", "Thursday", "8:30 - 10:30 AM", "1:30 - 3:30 PM", "VM-203", "VM-Lab 3"),
-        CourseModel("******** 501", "**************************", "Friday", "7:00 - 10:00 AM", "12:00 - 3:00 PM", "VM-OpRoom", "VM-305"),
-        CourseModel("******** 601", "**************************", "Saturday", "8:00 - 12:00 PM", "1:00 - 5:00 PM", "VM-Hospital", "VM-Clinic"),
-        CourseModel("VETMED* 102", "**************************", "Monday", "10:00 - 11:30 AM", "2:00 - 3:30 PM", "VM-202", "VM-301")
-    )
-
-    private val displayedCourses = mutableListOf<CourseModel>()
+    
+    private var allSubjects = listOf<Subject>()
+    private val displayedSubjects = mutableListOf<Subject>()
     private lateinit var adapter: CoursesAdapter
 
     override fun onCreateView(
@@ -61,12 +52,11 @@ class CoursesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        updateList()
-
         binding.rvCourses.layoutManager = LinearLayoutManager(requireContext())
         adapter = CoursesAdapter()
         binding.rvCourses.adapter = adapter
 
+        fetchSubjects()
         setupSearch()
 
         binding.btnSchedule.setOnClickListener {
@@ -78,28 +68,82 @@ class CoursesFragment : Fragment() {
         }
     }
 
+    private fun fetchSubjects() {
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val userEmail = sharedPref.getString("userEmail", null) ?: return
+
+        val params = mapOf("email" to userEmail)
+        RetrofitClient.instance.getSubjects(params).enqueue(object : Callback<List<Subject>> {
+            override fun onResponse(call: Call<List<Subject>>, response: Response<List<Subject>>) {
+                if (!isAdded || _binding == null) return
+
+                if (response.isSuccessful) {
+                    allSubjects = response.body() ?: emptyList()
+                    Log.d("VETSCHED_API", "Received JSON: ${Gson().toJson(allSubjects)}")
+                    updateList()
+                    
+                    val targetCode = arguments?.getString("targetCourseCode")
+                    if (targetCode != null) {
+                        val index = displayedSubjects.indexOfFirst { it.code == targetCode }
+                        if (index != -1) {
+                            expandedPosition = index
+                            adapter.notifyItemChanged(index)
+                            binding.rvCourses.scrollToPosition(index)
+                        }
+                    }
+                } else {
+                    val code = response.code()
+                    Toast.makeText(context, "Error $code: Failed to load subjects", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<List<Subject>>, t: Throwable) {
+                if (!isAdded || _binding == null) return
+                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
+    }
+
     private fun setupSearch() {
         binding.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 currentQuery = s?.toString() ?: ""
                 updateList()
-                adapter.notifyDataSetChanged()
             }
             override fun afterTextChanged(s: Editable?) {}
         })
     }
 
     private fun updateList() {
-        displayedCourses.clear()
+        displayedSubjects.clear()
+        
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val userYearLevel = sharedPref.getInt("userYearLevel", 1)
+
         val query = currentQuery.trim().lowercase()
-        val filtered = if (query.isEmpty()) {
-            allCourses
-        } else {
-            allCourses.filter { it.code.lowercase().contains(query) || it.name.lowercase().contains(query) }
+        val filtered = allSubjects.filter { subject ->
+            val matchesYear = subject.yearLevel == userYearLevel
+            val matchesQuery = if (query.isEmpty()) {
+                true
+            } else {
+                subject.code.lowercase().contains(query) || subject.name.lowercase().contains(query)
+            }
+            matchesYear && matchesQuery
         }
-        displayedCourses.addAll(filtered)
+        
+        displayedSubjects.addAll(filtered)
         binding.tvFoundCount.text = "${filtered.size} Found"
+        
+        if (displayedSubjects.isEmpty()) {
+            binding.tvEmptyState.visibility = View.VISIBLE
+            binding.rvCourses.visibility = View.GONE
+        } else {
+            binding.tvEmptyState.visibility = View.GONE
+            binding.rvCourses.visibility = View.VISIBLE
+        }
+        
+        adapter.notifyDataSetChanged()
     }
 
     override fun onDestroyView() {
@@ -109,7 +153,7 @@ class CoursesFragment : Fragment() {
 
     inner class CoursesAdapter : RecyclerView.Adapter<CoursesAdapter.ViewHolder>() {
 
-        inner class ViewHolder(val binding: ItemCourseBinding) : RecyclerView.ViewHolder(binding.root)
+        inner class ViewHolder(val itemBinding: ItemCourseBinding) : RecyclerView.ViewHolder(itemBinding.root)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val inflater = LayoutInflater.from(parent.context)
@@ -117,40 +161,110 @@ class CoursesFragment : Fragment() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val course = displayedCourses[position]
+            val subject = displayedSubjects[position]
             val isExpanded = position == expandedPosition
 
-            holder.binding.tvCourseCode.text = course.code
-            holder.binding.tvCourseNameMasked.text = course.name
-            holder.binding.tvSectionCount.text = "2 sections"
+            holder.itemBinding.tvCourseCode.text = subject.code
+            holder.itemBinding.tvCourseNameMasked.text = subject.name
             
-            holder.binding.layoutSections.visibility = if (isExpanded) View.VISIBLE else View.GONE
-            holder.binding.layoutExpandedContent.visibility = View.VISIBLE
+            val sectionCount = subject.sections.size
+            holder.itemBinding.tvSectionCount.text = if (sectionCount == 1) "1 section" else "$sectionCount sections"
+            
+            holder.itemBinding.layoutSections.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            
+            holder.itemBinding.containerSections.removeAllViews()
+            if (isExpanded) {
+                val inflater = LayoutInflater.from(holder.itemView.context)
+                subject.sections.forEach { section ->
+                    val sectionBinding = ItemCourseSectionBinding.inflate(inflater, holder.itemBinding.containerSections, true)
+                    sectionBinding.tvSectionName.text = section.sectionName ?: section.type ?: "Lecture"
 
-            holder.binding.courseHeader.setOnClickListener {
+                    val formattedDays = getSafeDayString(section)
+                    val formattedTime = "${formatTime(section.start)} - ${formatTime(section.end)}"
+                    val fullTimeRange = formattedTime
+                    
+                    sectionBinding.tvSectionDays.text = formattedDays
+                    sectionBinding.tvSectionTime.text = formattedTime
+                    sectionBinding.tvSectionRoom.text = section.room
+                    sectionBinding.tvSectionInstructor.text = section.instructor
+
+                    val isEnrolled = CourseRepository.isEnrolled(subject.code, sectionBinding.tvSectionName.text.toString(), requireContext())
+                    val isConflicting = !isEnrolled && CourseRepository.isConflicting(formattedDays, fullTimeRange, requireContext())
+
+                    if (isEnrolled) {
+                        sectionBinding.btnEnroll.text = "Enrolled"
+                        sectionBinding.btnEnroll.isEnabled = false
+                        sectionBinding.btnEnroll.setBackgroundColor(Color.LTGRAY)
+                    } else if (isConflicting) {
+                        sectionBinding.btnEnroll.text = "Conflict"
+                        sectionBinding.btnEnroll.isEnabled = false
+                        sectionBinding.btnEnroll.setBackgroundColor(Color.parseColor("#BDBDBD"))
+                    } else {
+                        sectionBinding.btnEnroll.text = "Enroll"
+                        sectionBinding.btnEnroll.isEnabled = true
+                    }
+
+                    sectionBinding.btnEnroll.setOnClickListener {
+                        val enrolled = EnrolledCourse(
+                            formattedDays,
+                            fullTimeRange,
+                            sectionBinding.tvSectionName.text.toString(),
+                            subject.code,
+                            subject.name,
+                            section.room,
+                            section.instructor
+                        )
+                        CourseRepository.enroll(enrolled, it.context)
+                        Toast.makeText(it.context, "Enrolled in ${enrolled.section}", Toast.LENGTH_SHORT).show()
+                        notifyItemChanged(position)
+                    }
+                }
+            }
+
+            holder.itemBinding.courseHeader.setOnClickListener {
                 val prev = expandedPosition
                 expandedPosition = if (isExpanded) -1 else position
                 notifyItemChanged(prev)
                 notifyItemChanged(expandedPosition)
             }
+        }
 
-            holder.binding.btnEnrollA.setOnClickListener {
-                CourseRepository.enroll(
-                    EnrolledCourse(course.day, course.timeA, "Section A", course.code, course.name, course.roomA),
-                    requireContext()
-                )
-                Toast.makeText(requireContext(), "Enrolled in Section A", Toast.LENGTH_SHORT).show()
+        private fun getSafeDayString(section: Section): String {
+            val possibleFields = mutableListOf<String?>()
+            
+            section.day?.let { if (it.isNotBlank()) possibleFields.add(it) }
+            section.dayOfWeek?.let { if (it.isNotBlank()) possibleFields.add(it) }
+            section.scheduleDay?.let { if (it.isNotBlank()) possibleFields.add(it) }
+            
+            section.days?.let { d ->
+                if (d is List<*>) {
+                    if (d.isNotEmpty()) possibleFields.add(d.joinToString(", "))
+                } else if (d is String && d.isNotBlank() && d != "[]" && d != "{}") {
+                    possibleFields.add(d)
+                }
             }
 
-            holder.binding.btnEnrollB.setOnClickListener {
-                CourseRepository.enroll(
-                    EnrolledCourse(course.day, course.timeB, "Section B", course.code, course.name, course.roomB),
-                    requireContext()
-                )
-                Toast.makeText(requireContext(), "Enrolled in Section B", Toast.LENGTH_SHORT).show()
+            val valid = possibleFields.filterNotNull().map { it.replace("{", "").replace("}", "").replace("[", "").replace("]", "").replace("\"", "").trim() }
+                .filter { it.isNotBlank() && !it.equals("null", true) }
+
+            if (valid.isEmpty()) return "Mon"
+
+            return valid.first()
+        }
+
+        private fun formatTime(rawTime: String): String {
+            return try {
+                val parts = rawTime.split(":")
+                val hour = parts[0].toInt()
+                val min = parts[1].toInt()
+                val suffix = if (hour >= 12) "PM" else "AM"
+                val h12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+                String.format("%d:%02d %s", h12, min, suffix)
+            } catch (e: Exception) {
+                rawTime
             }
         }
 
-        override fun getItemCount(): Int = displayedCourses.size
+        override fun getItemCount(): Int = displayedSubjects.size
     }
 }

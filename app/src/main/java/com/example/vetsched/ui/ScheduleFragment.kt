@@ -24,7 +24,7 @@ class ScheduleFragment : Fragment() {
     private var _binding: FragmentScheduleBinding? = null
     private val binding get() = _binding!!
 
-    private val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+    private val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -59,7 +59,9 @@ class ScheduleFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        binding.viewPager.adapter?.notifyDataSetChanged()
+        val current = binding.viewPager.currentItem
+        setupViewPager()
+        binding.viewPager.setCurrentItem(current, false)
     }
 
     private fun setupViewPager() {
@@ -77,7 +79,7 @@ class ScheduleFragment : Fragment() {
     private fun setupTabs() {
         val tabLayouts = listOf(
             binding.tabMon, binding.tabTue, binding.tabWed, 
-            binding.tabThu, binding.tabFri, binding.tabSat
+            binding.tabThu, binding.tabFri, binding.tabSat, binding.tabSun
         )
 
         tabLayouts.forEachIndexed { index, layout ->
@@ -93,15 +95,15 @@ class ScheduleFragment : Fragment() {
 
         val tabLayouts = listOf(
             binding.tabMon, binding.tabTue, binding.tabWed, 
-            binding.tabThu, binding.tabFri, binding.tabSat
+            binding.tabThu, binding.tabFri, binding.tabSat, binding.tabSun
         )
         val labelViews = listOf(
             binding.tvMonLabel, binding.tvTueLabel, binding.tvWedLabel, 
-            binding.tvThuLabel, binding.tvFriLabel, binding.tvSatLabel
+            binding.tvThuLabel, binding.tvFriLabel, binding.tvSatLabel, binding.tvSunLabel
         )
         val dateViews = listOf(
             binding.tvMonDate, binding.tvTueDate, binding.tvWedDate, 
-            binding.tvThuDate, binding.tvFriDate, binding.tvSatDate
+            binding.tvThuDate, binding.tvFriDate, binding.tvSatDate, binding.tvSunDate
         )
 
         tabLayouts.forEachIndexed { index, layout ->
@@ -145,14 +147,14 @@ class ScheduleFragment : Fragment() {
 
                 enrolled.forEach { course ->
                     if (course.courseCode.isNotBlank()) {
-                        addCard(itemBinding, course)
+                        addCard(itemBinding, course, dayTitle)
                     }
                 }
 
                 setupTimeline(itemBinding)
             }
 
-            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse) {
+            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse, dayTitle: String) {
                 val cardBinding = ItemScheduleCardBinding.inflate(
                     LayoutInflater.from(itemBinding.root.context),
                     itemBinding.cardsContainer,
@@ -163,11 +165,18 @@ class ScheduleFragment : Fragment() {
                 cardBinding.tvSection.text = course.section
                 cardBinding.tvCourseName.text = course.courseName
                 cardBinding.tvLocation.text = course.room
-                cardBinding.tvInstructorMasked.text = "• ************"
+                cardBinding.tvInstructor.text = course.instructor
                 
                 cardBinding.btnRemove.setOnClickListener {
                     CourseRepository.remove(course, it.context)
-                    bind(course.day)
+                    bind(dayTitle)
+                }
+
+                cardBinding.root.setOnClickListener {
+                    val bundle = Bundle().apply {
+                        putString("targetCourseCode", course.courseCode)
+                    }
+                    findNavController().navigate(R.id.action_scheduleFragment_to_coursesFragment, bundle)
                 }
 
                 val timeInfo = parseTimeRange(course.timeRange)
