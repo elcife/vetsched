@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -17,11 +18,14 @@ import com.example.vetsched.data.EnrolledCourse
 import com.example.vetsched.databinding.FragmentConfirmScheduleBinding
 import com.example.vetsched.databinding.ItemDayScheduleBinding
 import com.example.vetsched.databinding.ItemScheduleCardBinding
+import com.google.gson.Gson
 
 class ConfirmScheduleFragment : Fragment() {
 
     private var _binding: FragmentConfirmScheduleBinding? = null
     private val binding get() = _binding!!
+
+    private var previewCourses: List<EnrolledCourse> = emptyList()
 
     private val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -31,6 +35,13 @@ class ConfirmScheduleFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentConfirmScheduleBinding.inflate(inflater, container, false)
+        
+        val json = arguments?.getString("preview_courses_json")
+        if (json != null) {
+            val type = object : com.google.gson.reflect.TypeToken<List<EnrolledCourse>>() {}.type
+            previewCourses = Gson().fromJson(json, type)
+        }
+        
         return binding.root
     }
 
@@ -42,6 +53,42 @@ class ConfirmScheduleFragment : Fragment() {
 
         binding.btnBack.setOnClickListener {
             findNavController().navigateUp()
+        }
+        
+        if (previewCourses.isNotEmpty()) {
+            binding.btnYesSubmit.isEnabled = true
+            binding.btnYesSubmit.setBackgroundColor(Color.parseColor("#77C647"))
+            binding.btnYesSubmit.text = "Confirm Enrollment"
+            
+            binding.btnYesSubmit.setOnClickListener {
+                enrollAllPreviews(0)
+            }
+        }
+    }
+
+    private fun enrollAllPreviews(index: Int) {
+        if (index >= previewCourses.size) {
+            Toast.makeText(context, "Enrollment completed", Toast.LENGTH_SHORT).show()
+            findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
+            return
+        }
+        
+        // Since one section has multiple slots but they share offeringIds, 
+        // we only need to call enroll ONCE per distinct section.
+        // However, EnrolledCourse represents a SLOT here.
+        // Let's just enroll the first one or ensure backend handles it.
+        // Actually, the current Repository logic takes one EnrolledCourse and sends its offeringIds.
+        
+        CourseRepository.enroll(previewCourses[index], requireContext()) { success ->
+            if (success) {
+                // If the section has multiple slots, they all share the same offeringIds,
+                // so the server will enroll the student in all of them at once.
+                // We don't need to loop if it's the same section.
+                Toast.makeText(context, "Enrolled in ${previewCourses[index].section}", Toast.LENGTH_SHORT).show()
+                findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
+            } else {
+                Toast.makeText(context, "Enrollment failed", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -121,6 +168,19 @@ class ConfirmScheduleFragment : Fragment() {
         _binding = null
     }
 
+    private fun getShortDay(fullDay: String): String {
+        return when (fullDay) {
+            "Monday" -> "Mon"
+            "Tuesday" -> "Tue"
+            "Wednesday" -> "Wed"
+            "Thursday" -> "Thu"
+            "Friday" -> "Fri"
+            "Saturday" -> "Sat"
+            "Sunday" -> "Sun"
+            else -> fullDay.take(3)
+        }
+    }
+
     inner class DailyScheduleAdapter(private val days: List<String>) :
         RecyclerView.Adapter<DailyScheduleAdapter.ViewHolder>() {
 
@@ -131,21 +191,32 @@ class ConfirmScheduleFragment : Fragment() {
                 itemBinding.tvDayTitle.text = dayTitle
                 itemBinding.cardsContainer.removeAllViews()
 
-                val enrolled = CourseRepository.getCoursesForDay(dayTitle, itemBinding.root.context)
-                itemBinding.tvActiveClasses.text = if (enrolled.size == 1) "1 Active Class" else "${enrolled.size} Active Classes"
+                val enrolled = CourseRepository.getCoursesForDay(dayTitle, itemBinding.root.context).toMutableList()
+                
+                // Add preview courses if they belong to this day
+                val shortDay = getShortDay(dayTitle)
+                previewCourses.forEach { pc ->
+                    val pcDays = pc.day.split(",").map { it.trim() }
+                    if (pcDays.any { it.equals(shortDay, ignoreCase = true) }) {
+                        enrolled.add(pc)
+                    }
+                }
+
+                itemBinding.tvActiveClasses.text = if (enrolled.size == 1) "1 Class" else "${enrolled.size} Classes"
                 
                 itemBinding.cardsContainer.visibility = if (enrolled.isNotEmpty()) View.VISIBLE else View.GONE
 
                 enrolled.forEach { course ->
                     if (course.courseCode.isNotBlank()) {
-                        addCard(itemBinding, course)
+                        val isPreview = previewCourses.contains(course)
+                        addCard(itemBinding, course, isPreview)
                     }
                 }
 
                 setupTimeline(itemBinding)
             }
 
-            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse) {
+            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse, isPreview: Boolean = false) {
                 val cardBinding = ItemScheduleCardBinding.inflate(
                     LayoutInflater.from(itemBinding.root.context),
                     itemBinding.cardsContainer,
@@ -153,11 +224,16 @@ class ConfirmScheduleFragment : Fragment() {
                 )
 
                 cardBinding.tvTimeRange.text = course.timeRange
-                cardBinding.tvSection.text = course.section
-                cardBinding.tvCourseName.text = course.courseName
+                cardBinding.tvSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
+                cardBinding.tvCourseName.text = if (isPreview) "[PREVIEW] ${course.courseName}" else course.courseName
                 cardBinding.tvLocation.text = course.room
                 cardBinding.tvInstructor.text = course.instructor
                 
+                if (isPreview) {
+                    cardBinding.root.alpha = 0.7f
+                    cardBinding.root.setBackgroundResource(R.drawable.bg_date_selected) // Or some other highlight
+                }
+
                 cardBinding.btnRemove.visibility = View.GONE
 
                 val timeInfo = parseTimeRange(course.timeRange)
@@ -182,9 +258,10 @@ class ConfirmScheduleFragment : Fragment() {
             }
 
             private fun parseTimeRange(range: String): TimeInfo {
-                val parts = range.split("-", "/")
-                val startStr = parts[0].trim()
-                val endStr = parts[1].trim()
+                val parts = range.split("-", "/", "•")
+                val cleanParts = parts.map { it.trim() }.filter { it.isNotEmpty() }
+                val startStr = cleanParts[0]
+                val endStr = if (cleanParts.size > 1) cleanParts[1] else startStr
                 
                 val endMin = timeToMinutes(endStr)
                 var startMin = timeToMinutes(startStr)

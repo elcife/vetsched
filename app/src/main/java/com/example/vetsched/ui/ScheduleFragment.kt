@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -39,10 +40,19 @@ class ScheduleFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null)
+        
+        if (studentId == null) {
+            Toast.makeText(requireContext(), "Session expired, please login again", Toast.LENGTH_LONG).show()
+            findNavController().navigate(R.id.action_scheduleFragment_to_startFragment)
+            return
+        }
+
         binding.tvUserName.text = sharedPref.getString("userName", "Student")
 
-        setupViewPager()
         setupTabs()
+        checkYearLevel()
+        // removed redundant loadEnrolledData() as onResume will handle it
 
         binding.btnProfile.setOnClickListener {
             findNavController().navigate(R.id.action_scheduleFragment_to_profileFragment)
@@ -59,9 +69,97 @@ class ScheduleFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        val current = binding.viewPager.currentItem
-        setupViewPager()
-        binding.viewPager.setCurrentItem(current, false)
+        // Only fetch if memory is empty or we just came back from enrollment
+        loadEnrolledData()
+    }
+
+    private fun loadEnrolledData() {
+        CourseRepository.fetchEnrolled(requireContext()) {
+            if (isAdded && _binding != null) {
+                setupViewPager()
+                updateDayIndicators()
+            }
+        }
+    }
+
+    private fun updateDayIndicators() {
+        val tabLayouts = listOf(
+            binding.tabMon, binding.tabTue, binding.tabWed, 
+            binding.tabThu, binding.tabFri, binding.tabSat, binding.tabSun
+        )
+        
+        days.forEachIndexed { index, day ->
+            val hasCourses = CourseRepository.getCoursesForDay(day, requireContext()).isNotEmpty()
+            if (binding.viewPager.currentItem != index) {
+                if (hasCourses) {
+                    tabLayouts[index].setBackgroundResource(R.drawable.bg_date_has_courses)
+                } else {
+                    tabLayouts[index].setBackgroundResource(R.drawable.bg_date_unselected)
+                }
+            }
+        }
+    }
+
+    private fun checkYearLevel() {
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val yearLevel = sharedPref.getInt("userYearLevel", 0)
+        
+        if (yearLevel == 0) {
+            showYearLevelSelectionDialog()
+        }
+    }
+
+    private fun showYearLevelSelectionDialog() {
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year")
+        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setTitle("Select Your Year Level")
+            .setMessage("We need to know your year level to show you the correct courses.")
+            .setCancelable(false)
+            .setItems(yearLevels) { _, which ->
+                val yearLevelInt = which + 1
+                updateYearLevelOnServer(yearLevelInt.toString())
+            }
+            .show()
+    }
+
+    private fun updateYearLevelOnServer(yearLevel: String) {
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val userEmail = sharedPref.getString("userEmail", null)
+
+        if (userEmail == null) {
+            Toast.makeText(requireContext(), "Error: User email not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val params = mapOf(
+            "email" to userEmail,
+            "year_level" to yearLevel
+        )
+
+        com.example.vetsched.api.RetrofitClient.instance.updateYearLevel(params).enqueue(object : retrofit2.Callback<com.example.vetsched.api.models.AuthResponse> {
+            override fun onResponse(
+                call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                response: retrofit2.Response<com.example.vetsched.api.models.AuthResponse>
+            ) {
+                if (!isAdded || _binding == null) return
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    sharedPref.edit().putInt("userYearLevel", yearLevel.toInt()).apply()
+                    Toast.makeText(context, "Year level updated!", Toast.LENGTH_SHORT).show()
+                } else {
+                    val msg = response.body()?.message ?: "Update failed"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    // If it failed, we might need to ask again
+                    showYearLevelSelectionDialog()
+                }
+            }
+
+            override fun onFailure(call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>, t: Throwable) {
+                if (!isAdded || _binding == null) return
+                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                showYearLevelSelectionDialog()
+            }
+        })
     }
 
     private fun setupViewPager() {
@@ -147,14 +245,14 @@ class ScheduleFragment : Fragment() {
 
                 enrolled.forEach { course ->
                     if (course.courseCode.isNotBlank()) {
-                        addCard(itemBinding, course, dayTitle)
+                        addCard(itemBinding, course)
                     }
                 }
 
                 setupTimeline(itemBinding)
             }
 
-            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse, dayTitle: String) {
+            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse) {
                 val cardBinding = ItemScheduleCardBinding.inflate(
                     LayoutInflater.from(itemBinding.root.context),
                     itemBinding.cardsContainer,
@@ -162,14 +260,19 @@ class ScheduleFragment : Fragment() {
                 )
                 
                 cardBinding.tvTimeRange.text = course.timeRange
-                cardBinding.tvSection.text = course.section
+                cardBinding.tvSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
                 cardBinding.tvCourseName.text = course.courseName
                 cardBinding.tvLocation.text = course.room
                 cardBinding.tvInstructor.text = course.instructor
                 
                 cardBinding.btnRemove.setOnClickListener {
-                    CourseRepository.remove(course, it.context)
-                    bind(dayTitle)
+                    CourseRepository.remove(course, it.context) { success ->
+                        if (success) {
+                            loadEnrolledData() // Re-fetch from server to be sure
+                        } else {
+                            Toast.makeText(it.context, "Failed to unenroll", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
 
                 cardBinding.root.setOnClickListener {

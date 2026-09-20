@@ -30,14 +30,18 @@ class StartFragment : Fragment() {
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val isLoggedIn = sharedPref.getBoolean("isLoggedIn", false)
         val savedUserName = sharedPref.getString("userName", null)
+        val studentId = sharedPref.getString("studentId", null)
 
-        if (isLoggedIn && savedUserName != null) {
+        if (isLoggedIn && savedUserName != null && studentId != null) {
             val bundle = Bundle().apply {
                 putString("userName", savedUserName)
             }
             findNavController().navigate(R.id.action_startFragment_to_loginFragment)
             findNavController().navigate(R.id.action_loginFragment_to_scheduleFragment, bundle)
             return
+        } else if (isLoggedIn) {
+            // Clean up invalid session
+            sharedPref.edit().putBoolean("isLoggedIn", false).apply()
         }
 
         binding.btnGetStarted.setOnClickListener {

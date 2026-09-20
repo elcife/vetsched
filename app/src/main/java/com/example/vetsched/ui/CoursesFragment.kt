@@ -58,6 +58,7 @@ class CoursesFragment : Fragment() {
 
         fetchSubjects()
         setupSearch()
+        setupSwipeRefresh()
 
         binding.btnSchedule.setOnClickListener {
             findNavController().navigate(R.id.action_coursesFragment_to_scheduleFragment)
@@ -68,40 +69,94 @@ class CoursesFragment : Fragment() {
         }
     }
 
-    private fun fetchSubjects() {
-        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val userEmail = sharedPref.getString("userEmail", null) ?: return
+    private fun setupSwipeRefresh() {
+        binding.swipeRefresh.setOnRefreshListener {
+            fetchSubjects()
+        }
+        // Optional: Customize colors
+        binding.swipeRefresh.setColorSchemeResources(R.color.vetsched_primary)
+    }
 
-        val params = mapOf("email" to userEmail)
-        RetrofitClient.instance.getSubjects(params).enqueue(object : Callback<List<Subject>> {
+    private var fetchedSubjects: List<Subject>? = null
+    private var fetchedSections: List<Section>? = null
+
+    private fun fetchSubjects() {
+        binding.swipeRefresh.isRefreshing = true
+        fetchedSubjects = null
+        fetchedSections = null
+
+        RetrofitClient.instance.getSubjects().enqueue(object : Callback<List<Subject>> {
             override fun onResponse(call: Call<List<Subject>>, response: Response<List<Subject>>) {
                 if (!isAdded || _binding == null) return
-
                 if (response.isSuccessful) {
-                    allSubjects = response.body() ?: emptyList()
-                    Log.d("VETSCHED_API", "Received JSON: ${Gson().toJson(allSubjects)}")
-                    updateList()
-                    
-                    val targetCode = arguments?.getString("targetCourseCode")
-                    if (targetCode != null) {
-                        val index = displayedSubjects.indexOfFirst { it.code == targetCode }
-                        if (index != -1) {
-                            expandedPosition = index
-                            adapter.notifyItemChanged(index)
-                            binding.rvCourses.scrollToPosition(index)
-                        }
-                    }
+                    fetchedSubjects = response.body() ?: emptyList()
+                    checkAndMergeData()
                 } else {
-                    val code = response.code()
-                    Toast.makeText(context, "Error $code: Failed to load subjects", Toast.LENGTH_SHORT).show()
+                    handleFetchError("Subjects: ${response.code()}")
                 }
             }
 
             override fun onFailure(call: Call<List<Subject>>, t: Throwable) {
                 if (!isAdded || _binding == null) return
-                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                handleFetchError("Network: ${t.message}")
             }
         })
+
+        RetrofitClient.instance.getSections().enqueue(object : Callback<List<Section>> {
+            override fun onResponse(call: Call<List<Section>>, response: Response<List<Section>>) {
+                if (!isAdded || _binding == null) return
+                if (response.isSuccessful) {
+                    fetchedSections = response.body() ?: emptyList()
+                    checkAndMergeData()
+                } else {
+                    handleFetchError("Sections: ${response.code()}")
+                }
+            }
+
+            override fun onFailure(call: Call<List<Section>>, t: Throwable) {
+                if (!isAdded || _binding == null) return
+                handleFetchError("Network: ${t.message}")
+            }
+        })
+    }
+
+    private fun handleFetchError(message: String) {
+        binding.swipeRefresh.isRefreshing = false
+        // Prevent partial data from being stuck
+        fetchedSubjects = fetchedSubjects ?: emptyList()
+        fetchedSections = fetchedSections ?: emptyList()
+        Toast.makeText(context, "Error: $message", Toast.LENGTH_LONG).show()
+    }
+
+    private fun checkAndMergeData() {
+        val subjects = fetchedSubjects
+        val allSections = fetchedSections
+
+        if (subjects != null && allSections != null) {
+            binding.swipeRefresh.isRefreshing = false
+            
+            // Group sections by subjectId
+            val sectionsMap = allSections.groupBy { it.subjectId }
+            
+            // Assign sections to subjects
+            subjects.forEach { subject ->
+                subject.sections = sectionsMap[subject.id] ?: emptyList()
+            }
+            
+            allSubjects = subjects
+            updateList()
+            
+            // Handle scrolling to target course if specified
+            val targetCode = arguments?.getString("targetCourseCode")
+            if (targetCode != null) {
+                val index = displayedSubjects.indexOfFirst { it.code == targetCode }
+                if (index != -1) {
+                    expandedPosition = index
+                    adapter.notifyItemChanged(index)
+                    binding.rvCourses.scrollToPosition(index)
+                }
+            }
+        }
     }
 
     private fun setupSearch() {
@@ -119,7 +174,15 @@ class CoursesFragment : Fragment() {
         displayedSubjects.clear()
         
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val userYearLevel = sharedPref.getInt("userYearLevel", 1)
+        val userYearLevel = sharedPref.getInt("userYearLevel", 0)
+
+        if (userYearLevel == 0) {
+            binding.tvFoundCount.text = "Please set your year level in Profile"
+            binding.tvEmptyState.text = "Year level not set"
+            binding.tvEmptyState.visibility = View.VISIBLE
+            binding.rvCourses.visibility = View.GONE
+            return
+        }
 
         val query = currentQuery.trim().lowercase()
         val filtered = allSubjects.filter { subject ->
@@ -133,7 +196,7 @@ class CoursesFragment : Fragment() {
         }
         
         displayedSubjects.addAll(filtered)
-        binding.tvFoundCount.text = "${filtered.size} Found"
+        binding.tvFoundCount.text = "${filtered.size} Found (Year $userYearLevel)"
         
         if (displayedSubjects.isEmpty()) {
             binding.tvEmptyState.visibility = View.VISIBLE
@@ -177,24 +240,70 @@ class CoursesFragment : Fragment() {
                 val inflater = LayoutInflater.from(holder.itemView.context)
                 subject.sections.forEach { section ->
                     val sectionBinding = ItemCourseSectionBinding.inflate(inflater, holder.itemBinding.containerSections, true)
-                    sectionBinding.tvSectionName.text = section.sectionName ?: section.type ?: "Lecture"
+                    sectionBinding.tvSectionName.text = section.type.uppercase()
 
-                    val formattedDays = getSafeDayString(section)
-                    val formattedTime = "${formatTime(section.start)} - ${formatTime(section.end)}"
-                    val fullTimeRange = formattedTime
+                    sectionBinding.containerClassBoxes.removeAllViews()
+                    val allDays = mutableSetOf<String>()
+                    val instructors = mutableSetOf<String>()
+
+                    section.classes?.forEach { comp ->
+                        val type = comp.classType.uppercase()
+                        val days = comp.days.joinToString(", ")
+                        val time = "${formatTime(comp.start)} - ${formatTime(comp.end)}"
+                        val instructor = comp.instructor?.uppercase() ?: "TBA"
+                        
+                        val detailText = "$type $days $time $instructor"
+                        
+                        // Add a separate box for each class component
+                        val boxView = inflater.inflate(R.layout.item_class_box, sectionBinding.containerClassBoxes, false) as android.widget.TextView
+                        boxView.text = detailText
+                        sectionBinding.containerClassBoxes.addView(boxView)
+                        
+                        allDays.addAll(comp.days)
+                        instructors.add(instructor)
+                    }
+
+                    // Fallback for old data
+                    if (sectionBinding.containerClassBoxes.childCount == 0) {
+                        val formattedDays = getSafeDayString(section)
+                        val formattedTime = "${formatTime(section.start)} - ${formatTime(section.end)}"
+                        val instructor = section.instructor?.uppercase() ?: "TBA"
+                        
+                        val detailText = "${section.type.uppercase()} $formattedDays $formattedTime $instructor"
+                        val boxView = inflater.inflate(R.layout.item_class_box, sectionBinding.containerClassBoxes, false) as android.widget.TextView
+                        boxView.text = detailText
+                        sectionBinding.containerClassBoxes.addView(boxView)
+                        
+                        allDays.addAll(section.days ?: emptyList())
+                        instructors.add(instructor)
+                    }
                     
-                    sectionBinding.tvSectionDays.text = formattedDays
-                    sectionBinding.tvSectionTime.text = formattedTime
-                    sectionBinding.tvSectionRoom.text = section.room
-                    sectionBinding.tvSectionInstructor.text = section.instructor
+                    val remaining = section.remainingSeats ?: section.maxCapacity
+                    sectionBinding.tvRemainingSeats.text = "$remaining seats left"
+
+                    val combinedDaysStr = allDays.joinToString(", ")
+                    val firstTimeRange = if (section.classes?.isNotEmpty() == true) {
+                         "${formatTime(section.classes[0].start)} - ${formatTime(section.classes[0].end)}"
+                    } else {
+                         "${formatTime(section.start)} - ${formatTime(section.end)}"
+                    }
 
                     val isEnrolled = CourseRepository.isEnrolled(subject.code, sectionBinding.tvSectionName.text.toString(), requireContext())
-                    val isConflicting = !isEnrolled && CourseRepository.isConflicting(formattedDays, fullTimeRange, requireContext())
+                    val isConflicting = !isEnrolled && CourseRepository.isConflicting(combinedDaysStr, firstTimeRange, requireContext())
+                    val isFull = (section.remainingSeats ?: 1) <= 0
 
                     if (isEnrolled) {
                         sectionBinding.btnEnroll.text = "Enrolled"
                         sectionBinding.btnEnroll.isEnabled = false
                         sectionBinding.btnEnroll.setBackgroundColor(Color.LTGRAY)
+                    } else if (!section.isOpen) {
+                        sectionBinding.btnEnroll.text = "Closed"
+                        sectionBinding.btnEnroll.isEnabled = false
+                        sectionBinding.btnEnroll.setBackgroundColor(Color.LTGRAY)
+                    } else if (isFull) {
+                        sectionBinding.btnEnroll.text = "Full"
+                        sectionBinding.btnEnroll.isEnabled = false
+                        sectionBinding.btnEnroll.setBackgroundColor(Color.parseColor("#BDBDBD"))
                     } else if (isConflicting) {
                         sectionBinding.btnEnroll.text = "Conflict"
                         sectionBinding.btnEnroll.isEnabled = false
@@ -202,21 +311,52 @@ class CoursesFragment : Fragment() {
                     } else {
                         sectionBinding.btnEnroll.text = "Enroll"
                         sectionBinding.btnEnroll.isEnabled = true
+                        sectionBinding.btnEnroll.setBackgroundColor(Color.parseColor("#5C6D4F"))
                     }
 
                     sectionBinding.btnEnroll.setOnClickListener {
-                        val enrolled = EnrolledCourse(
-                            formattedDays,
-                            fullTimeRange,
-                            sectionBinding.tvSectionName.text.toString(),
-                            subject.code,
-                            subject.name,
-                            section.room,
-                            section.instructor
-                        )
-                        CourseRepository.enroll(enrolled, it.context)
-                        Toast.makeText(it.context, "Enrolled in ${enrolled.section}", Toast.LENGTH_SHORT).show()
-                        notifyItemChanged(position)
+                        val previewSlots = mutableListOf<EnrolledCourse>()
+                        
+                        section.classes?.forEach { comp ->
+                            comp.days.forEach { day ->
+                                previewSlots.add(EnrolledCourse(
+                                    day = day,
+                                    timeRange = "${formatTime(comp.start)} - ${formatTime(comp.end)}",
+                                    section = sectionBinding.tvSectionName.text.toString(),
+                                    courseCode = subject.code,
+                                    courseName = subject.name,
+                                    room = comp.room ?: section.room ?: "TBA",
+                                    instructor = comp.instructor ?: "TBA",
+                                    offeringIds = section.offeringIds,
+                                    type = comp.classType
+                                ))
+                            }
+                        }
+
+                        // Fallback for old data structure
+                        if (previewSlots.isEmpty()) {
+                            val formattedDays = getSafeDayString(section)
+                            val formattedTime = "${formatTime(section.start)} - ${formatTime(section.end)}"
+                            val dayList = formattedDays.split(",").map { it.trim() }
+                            dayList.forEach { day ->
+                                previewSlots.add(EnrolledCourse(
+                                    day = day,
+                                    timeRange = formattedTime,
+                                    section = sectionBinding.tvSectionName.text.toString(),
+                                    courseCode = subject.code,
+                                    courseName = subject.name,
+                                    room = section.room ?: "TBA",
+                                    instructor = section.instructor ?: "TBA",
+                                    offeringIds = section.offeringIds,
+                                    type = section.type
+                                ))
+                            }
+                        }
+                        
+                        val bundle = Bundle().apply {
+                            putString("preview_courses_json", Gson().toJson(previewSlots))
+                        }
+                        findNavController().navigate(R.id.action_coursesFragment_to_confirmScheduleFragment, bundle)
                     }
                 }
             }
@@ -230,26 +370,9 @@ class CoursesFragment : Fragment() {
         }
 
         private fun getSafeDayString(section: Section): String {
-            val possibleFields = mutableListOf<String?>()
-            
-            section.day?.let { if (it.isNotBlank()) possibleFields.add(it) }
-            section.dayOfWeek?.let { if (it.isNotBlank()) possibleFields.add(it) }
-            section.scheduleDay?.let { if (it.isNotBlank()) possibleFields.add(it) }
-            
-            section.days?.let { d ->
-                if (d is List<*>) {
-                    if (d.isNotEmpty()) possibleFields.add(d.joinToString(", "))
-                } else if (d is String && d.isNotBlank() && d != "[]" && d != "{}") {
-                    possibleFields.add(d)
-                }
-            }
-
-            val valid = possibleFields.filterNotNull().map { it.replace("{", "").replace("}", "").replace("[", "").replace("]", "").replace("\"", "").trim() }
-                .filter { it.isNotBlank() && !it.equals("null", true) }
-
-            if (valid.isEmpty()) return "Mon"
-
-            return valid.first()
+            val days = section.days
+            if (days.isNullOrEmpty()) return "Mon"
+            return days.joinToString(", ")
         }
 
         private fun formatTime(rawTime: String): String {

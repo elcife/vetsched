@@ -96,7 +96,7 @@ class ProfileFragment : Fragment() {
     }
 
     private fun showYearLevelSelectionDialog() {
-        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year")
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year")
         AlertDialog.Builder(requireContext())
             .setTitle("Select New Year Level")
             .setItems(yearLevels) { _, which ->

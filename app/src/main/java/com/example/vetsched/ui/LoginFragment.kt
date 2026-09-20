@@ -62,13 +62,14 @@ class LoginFragment : Fragment() {
                         val user = response.body()?.user
                         val fullName = "${user?.firstName} ${user?.lastName}"
                         val emailSaved = user?.email ?: email
-                        val yearLevel = user?.yearLevel ?: 1
+                        val yearLevel = user?.yearLevel ?: 0 // Use 0 to indicate missing year level
                         
                         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
                         with(sharedPref.edit()) {
                             putBoolean("isLoggedIn", true)
                             putString("userName", fullName)
                             putString("userEmail", emailSaved)
+                            putString("studentId", user?.studentId)
                             putInt("userYearLevel", yearLevel)
                             apply()
                         }

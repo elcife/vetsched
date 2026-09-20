@@ -10,103 +10,29 @@
         android:id="@+id/tvSectionName"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Section Name"
+        android:text="SECTION A"
         android:textColor="@color/vetsched_text_primary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textAllCaps="true"
+        android:letterSpacing="0.05" />
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_calendar"
-            app:tint="@color/vetsched_text_hint" />
-
-        <TextView
-            android:id="@+id/tvSectionDays"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="Mon, Wed"
-            android:textColor="#666666"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_schedule"
-            app:tint="@color/vetsched_text_hint" />
-
-        <TextView
-            android:id="@+id/tvSectionTime"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="0:00 - 0:00"
-            android:textColor="#666666"
-            android:textSize="15sp" />
-    </LinearLayout>
-
-    <LinearLayout
+        android:id="@+id/containerClassBoxes"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="vertical" />
 
-        <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_location"
-            app:tint="@color/vetsched_text_hint" />
-
-        <TextView
-            android:id="@+id/tvSectionRoom"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="Room"
-            android:textColor="#666666"
-            android:textSize="15sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
+    <TextView
+        android:id="@+id/tvRemainingSeats"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <ImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_profile"
-            app:tint="@color/vetsched_text_hint" />
-
-        <TextView
-            android:id="@+id/tvSectionInstructor"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="Instructor"
-            android:textColor="#666666"
-            android:textSize="15sp" />
-    </LinearLayout>
+        android:text="0 seats left"
+        android:textColor="#757575"
+        android:textSize="12sp"
+        android:textStyle="italic" />
 
     <Button
         android:id="@+id/btnEnroll"

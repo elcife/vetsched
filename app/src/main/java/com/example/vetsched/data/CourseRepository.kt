@@ -11,24 +11,113 @@ data class EnrolledCourse(
     val courseCode: String,
     val courseName: String,
     val room: String,
-    val instructor: String
+    val instructor: String,
+    val offeringIds: List<Int>? = null,
+    val type: String? = null
 )
 
 object CourseRepository {
     private val enrolledCourses = mutableListOf<EnrolledCourse>()
+    private var isLoaded = false
 
-    fun enroll(course: EnrolledCourse, context: Context) {
-        loadFromPrefs(context)
-        if (!enrolledCourses.any { it.courseCode == course.courseCode && it.section == course.section }) {
-            enrolledCourses.add(course)
-            saveToPrefs(context)
-        }
+    fun fetchEnrolled(context: Context, callback: (Boolean) -> Unit) {
+        val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null) ?: return callback(false)
+
+        com.example.vetsched.api.RetrofitClient.instance.getEnrolledCourses(studentId)
+            .enqueue(object : retrofit2.Callback<List<EnrolledCourse>> {
+                override fun onResponse(
+                    call: retrofit2.Call<List<EnrolledCourse>>,
+                    response: retrofit2.Response<List<EnrolledCourse>>
+                ) {
+                    if (response.isSuccessful) {
+                        enrolledCourses.clear()
+                        enrolledCourses.addAll(response.body() ?: emptyList())
+                        isLoaded = true
+                        saveToPrefs(context)
+                        callback(true)
+                    } else {
+                        callback(false)
+                    }
+                }
+
+                override fun onFailure(call: retrofit2.Call<List<EnrolledCourse>>, t: Throwable) {
+                    callback(false)
+                }
+            })
     }
 
-    fun remove(course: EnrolledCourse, context: Context) {
-        loadFromPrefs(context)
-        enrolledCourses.removeAll { it.courseCode == course.courseCode && it.section == course.section }
-        saveToPrefs(context)
+    fun enroll(course: EnrolledCourse, context: Context, callback: (Boolean) -> Unit) {
+        val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null) ?: return callback(false)
+
+        val request = com.example.vetsched.api.models.EnrollmentRequest(
+            studentId = studentId,
+            offeringIds = (course.offeringIds ?: emptyList<Int>())
+        )
+
+        com.example.vetsched.api.RetrofitClient.instance.enroll(request)
+            .enqueue(object : retrofit2.Callback<com.example.vetsched.api.models.AuthResponse> {
+                override fun onResponse(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    response: retrofit2.Response<com.example.vetsched.api.models.AuthResponse>
+                ) {
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        enrolledCourses.add(course)
+                        saveToPrefs(context)
+                        callback(true)
+                    } else {
+                        callback(false)
+                    }
+                }
+
+                override fun onFailure(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    t: Throwable
+                ) {
+                    callback(false)
+                }
+            })
+    }
+
+    fun remove(course: EnrolledCourse, context: Context, callback: (Boolean) -> Unit) {
+        val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null) ?: return callback(false)
+
+        val ids = course.offeringIds
+        if (ids.isNullOrEmpty()) {
+            enrolledCourses.removeAll { it.courseCode == course.courseCode && it.section == course.section }
+            saveToPrefs(context)
+            return callback(true) 
+        }
+
+        val request = com.example.vetsched.api.models.EnrollmentRequest(
+            studentId = studentId,
+            offeringIds = ids
+        )
+
+        com.example.vetsched.api.RetrofitClient.instance.unenroll(request)
+            .enqueue(object : retrofit2.Callback<com.example.vetsched.api.models.AuthResponse> {
+                override fun onResponse(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    response: retrofit2.Response<com.example.vetsched.api.models.AuthResponse>
+                ) {
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        enrolledCourses.removeAll { it.courseCode == course.courseCode && it.section == course.section }
+                        saveToPrefs(context)
+                        callback(true)
+                    } else {
+                        callback(false)
+                    }
+                }
+
+                override fun onFailure(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    t: Throwable
+                ) {
+                    callback(false)
+                }
+            })
     }
 
     fun clear(context: Context) {
@@ -37,14 +126,14 @@ object CourseRepository {
     }
 
     fun isEnrolled(courseCode: String, sectionName: String, context: Context): Boolean {
-        loadFromPrefs(context)
+        if (!isLoaded) loadFromPrefs(context)
         return enrolledCourses.any { it.courseCode == courseCode && it.section == sectionName }
     }
 
     fun isConflicting(newDayStr: String, newTimeRange: String, context: Context): Boolean {
         if (newDayStr.isBlank() || newDayStr == "No days assigned") return false
 
-        loadFromPrefs(context)
+        if (!isLoaded) loadFromPrefs(context)
         val newDays = parseDays(newDayStr)
         val newTime = parseRange(newTimeRange) ?: return false
 
@@ -104,7 +193,7 @@ object CourseRepository {
     }
 
     fun getCoursesForDay(dayFull: String, context: Context): List<EnrolledCourse> {
-        loadFromPrefs(context)
+        if (!isLoaded) loadFromPrefs(context)
         val shortDay = when (dayFull) {
             "Monday" -> "Mon"
             "Tuesday" -> "Tue"
@@ -122,7 +211,7 @@ object CourseRepository {
     }
 
     fun getAllEnrolled(context: Context): List<EnrolledCourse> {
-        loadFromPrefs(context)
+        if (!isLoaded) loadFromPrefs(context)
         return enrolledCourses
     }
 
@@ -141,5 +230,6 @@ object CourseRepository {
             enrolledCourses.clear()
             enrolledCourses.addAll(list)
         }
+        isLoaded = true
     }
 }

@@ -15,23 +15,34 @@ data class Subject(
     val code: String,
     val name: String,
     val yearLevel: Int,
-    val sections: List<Section>
+    @Transient var sections: List<Section> = emptyList()
 )
 
 data class Section(
     val id: Int,
     val type: String,
+    val isOpen: Boolean = true,
     val start: String,
     val end: String,
-    val days: Any?,
-    @SerializedName("day") val day: String? = null,
-    @SerializedName("section_name") val sectionName: String? = null,
-    @SerializedName("day_of_week") val dayOfWeek: String? = null,
-    @SerializedName("schedule_day") val scheduleDay: String? = null,
-    val instructor: String,
-    val room: String,
+    val days: List<String>?,
+    val instructor: String?,
+    val room: String?,
     val maxCapacity: Int,
-    val subjectId: Int
+    val enrollmentCount: Int? = 0,
+    val remainingSeats: Int? = null,
+    val subjectId: Int?,
+    val offeringIds: List<Int>? = null,
+    val classes: List<ClassComponent>? = null
+)
+
+data class ClassComponent(
+    val classType: String,
+    val start: String,
+    val end: String,
+    val days: List<String>,
+    val instructor: String?,
+    val room: String?,
+    val offeringIds: List<Int>
 )
 
 data class AuthResponse(
@@ -39,4 +50,9 @@ data class AuthResponse(
     val message: String,
     @SerializedName("error_field") val errorField: String? = null,
     val user: User? = null
+)
+
+data class EnrollmentRequest(
+    @SerializedName("studentId") val studentId: String,
+    @SerializedName("offeringIds") val offeringIds: List<Int>
 )
