@@ -32,12 +32,12 @@ interface ApiService {
     @GET("api.php?resource=sections")
     fun getSections(): Call<List<Section>>
 
-    @GET("enrollment.php?resource=enrolled_courses")
+    @GET("plotting.php?resource=enrolled_courses")
     fun getEnrolledCourses(@Query("studentId") studentId: String): Call<List<com.example.vetsched.data.EnrolledCourse>>
 
-    @POST("enrollment.php?resource=enroll")
+    @POST("plotting.php?resource=enroll")
     fun enroll(@Body request: EnrollmentRequest): Call<AuthResponse>
 
-    @POST("enrollment.php?resource=unenroll")
+    @POST("plotting.php?resource=unenroll")
     fun unenroll(@Body request: EnrollmentRequest): Call<AuthResponse>
 }
