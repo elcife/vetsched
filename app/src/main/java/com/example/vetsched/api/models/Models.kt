@@ -49,6 +49,7 @@ data class AuthResponse(
     val success: Boolean,
     val message: String,
     @SerializedName("error_field") val errorField: String? = null,
+    @SerializedName("resend_after_seconds") val resendAfterSeconds: Int? = null,
     val user: User? = null
 )
 

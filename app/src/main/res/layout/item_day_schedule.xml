@@ -60,6 +60,8 @@
                 android:id="@+id/cardsContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:elevation="4dp"
                 android:visibility="gone">
             </androidx.constraintlayout.widget.ConstraintLayout>
 

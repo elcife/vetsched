@@ -24,6 +24,9 @@
             android:id="@+id/action_loginFragment_to_registerFragment"
             app:destination="@id/registerFragment" />
         <action
+            android:id="@+id/action_loginFragment_to_passwordResetFragment"
+            app:destination="@id/passwordResetFragment" />
+        <action
             android:id="@+id/action_loginFragment_to_scheduleFragment"
             app:destination="@id/scheduleFragment"
             app:popUpTo="@id/nav_graph"
@@ -110,6 +113,12 @@
             android:id="@+id/action_registerFragment_to_loginFragment"
             app:destination="@id/loginFragment" />
     </fragment>
+
+    <fragment
+        android:id="@+id/passwordResetFragment"
+        android:name="com.example.vetsched.ui.PasswordResetFragment"
+        android:label="PasswordResetFragment"
+        tools:layout="@layout/fragment_password_reset" />
 
     <fragment
         android:id="@+id/demoFragment"

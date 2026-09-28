@@ -1,6 +1,7 @@
 package com.example.vetsched.ui
 
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -22,6 +23,8 @@ class RegisterFragment : Fragment() {
 
     private var _binding: FragmentRegisterBinding? = null
     private val binding get() = _binding!!
+    private var resendTimer: CountDownTimer? = null
+    private var resendMillisRemaining = 0L
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -43,71 +46,100 @@ class RegisterFragment : Fragment() {
         }
 
         binding.btnCreateAccount.setOnClickListener {
-            clearAllErrors()
-            
-            val firstName = binding.etFirstName.text.toString().trim()
-            val lastName = binding.etLastName.text.toString().trim()
-            val email = binding.etEmail.text.toString().trim()
-            val idNumber = binding.etIDNumber.text.toString().trim()
-            
-            // Ignore dashes for validation and submission
-            val studentID = idNumber.replace("-", "")
-            
-            val yearLevelText = binding.etYearLevel.text.toString().trim()
-            val password = binding.etPassword.text.toString()
-            val confirmPassword = binding.etConfirmPassword.text.toString()
+            val params = validatedRegistrationParams() ?: return@setOnClickListener
+            requestRegistrationOtp(params)
+        }
 
-            if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() || 
-                idNumber.isEmpty() || yearLevelText.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
-                Toast.makeText(requireContext(), "All fields are required!", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
+        binding.btnResendRegistrationOtp.setOnClickListener {
+            val params = validatedRegistrationParams() ?: return@setOnClickListener
+            requestRegistrationOtp(params)
+        }
 
-            val yearLevelInt = when (yearLevelText) {
-                "1st Year" -> 1
-                "2nd Year" -> 2
-                "3rd Year" -> 3
-                "4th Year" -> 4
-                else -> 0
-            }
+        binding.btnVerifyRegistrationOtp.setOnClickListener {
+            verifyRegistrationOtp()
+        }
 
-            if (yearLevelInt == 0) {
-                binding.tilYearLevel.error = "Please select a year level"
-                return@setOnClickListener
-            }
+        binding.btnEditRegistration.setOnClickListener {
+            resendTimer?.cancel()
+            resendTimer = null
+            resendMillisRemaining = 0L
+            binding.registrationOtpPanel.visibility = View.GONE
+            binding.btnCreateAccount.visibility = View.VISIBLE
+            setRegistrationFieldsEnabled(true)
+            binding.etRegistrationOtp.text?.clear()
+            renderResendCooldown()
+        }
+    }
 
-            // Validate cleaned ID length: Minimum 9, Maximum 12
-            if (studentID.length !in 9..12 || !studentID.all { it.isDigit() }) {
-                binding.tilIDNumber.error = "Invalid ID format (9-12 digits required)"
-                return@setOnClickListener
-            }
+    private fun validatedRegistrationParams(): Map<String, String>? {
+        clearAllErrors()
 
-            if (password.length < 10) {
-                binding.tilPassword.error = "Minimum 10 characters"
-                return@setOnClickListener
-            }
+        val firstName = binding.etFirstName.text.toString().trim()
+        val lastName = binding.etLastName.text.toString().trim()
+        val email = binding.etEmail.text.toString().trim()
+        val idNumber = binding.etIDNumber.text.toString().trim()
+        val studentID = idNumber.replace("-", "")
+        val yearLevelText = binding.etYearLevel.text.toString().trim()
+        val password = binding.etPassword.text.toString()
+        val confirmPassword = binding.etConfirmPassword.text.toString()
 
-            if (password != confirmPassword) {
-                binding.tilConfirmPassword.error = "Passwords do not match"
-                return@setOnClickListener
-            }
+        if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() ||
+            idNumber.isEmpty() || yearLevelText.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()
+        ) {
+            Toast.makeText(requireContext(), "All fields are required!", Toast.LENGTH_SHORT).show()
+            return null
+        }
 
-            val params = mapOf(
-                "first_name" to firstName,
-                "last_name" to lastName,
-                "email" to email,
-                "student_id" to studentID,
-                "year_level" to yearLevelInt.toString(),
-                "password" to password
-            )
+        val yearLevelInt = when (yearLevelText) {
+            "1st Year" -> 1
+            "2nd Year" -> 2
+            "3rd Year" -> 3
+            "4th Year" -> 4
+            else -> 0
+        }
 
-            RetrofitClient.instance.register(params).enqueue(object : Callback<AuthResponse> {
+        if (yearLevelInt == 0) {
+            binding.tilYearLevel.error = "Please select a year level"
+            return null
+        }
+        if (studentID.length !in 9..12 || !studentID.all { it.isDigit() }) {
+            binding.tilIDNumber.error = "Invalid ID format (9-12 digits required)"
+            return null
+        }
+        if (password.length < 10) {
+            binding.tilPassword.error = "Minimum 10 characters"
+            return null
+        }
+        if (password != confirmPassword) {
+            binding.tilConfirmPassword.error = "Passwords do not match"
+            return null
+        }
+
+        return mapOf(
+            "first_name" to firstName,
+            "last_name" to lastName,
+            "email" to email,
+            "student_id" to studentID,
+            "year_level" to yearLevelInt.toString(),
+            "password" to password
+        )
+    }
+
+    private fun requestRegistrationOtp(params: Map<String, String>) {
+        setRequestLoading(true)
+        RetrofitClient.instance.requestRegistrationOtp(params).enqueue(object : Callback<AuthResponse> {
                 override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
                     if (!isAdded || _binding == null) return
-
-                    if (response.isSuccessful && response.body()?.success == true) {
-                        Toast.makeText(context, "Account Created!", Toast.LENGTH_SHORT).show()
-                        findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
+                    setRequestLoading(false)
+                    val result = response.body()
+                    if (response.isSuccessful && result?.success == true) {
+                        binding.registrationOtpPanel.visibility = View.VISIBLE
+                        binding.btnCreateAccount.visibility = View.GONE
+                        setRegistrationFieldsEnabled(false)
+                        binding.tvRegistrationOtpMessage.text =
+                            getString(R.string.registration_otp_sent_to, params.getValue("email"))
+                        startResendCooldown(result.resendAfterSeconds ?: 60)
+                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
                     } else {
                         val errorBody = response.errorBody()?.string()
                         val authResponse = try {
@@ -116,12 +148,12 @@ class RegisterFragment : Fragment() {
                             } else {
                                 response.body()
                             }
-                        } catch (e: Exception) {
+                        } catch (_: com.google.gson.JsonSyntaxException) {
                             null
                         }
-                        
-                        val errorMsg = authResponse?.message ?: "Registration failed"
-                        
+
+                        val errorMsg = authResponse?.message ?: "Could not send verification code"
+
                         when (authResponse?.errorField) {
                             "student_id" -> _binding?.tilIDNumber?.error = errorMsg
                             "email" -> _binding?.tilEmail?.error = errorMsg
@@ -133,9 +165,105 @@ class RegisterFragment : Fragment() {
 
                 override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
                     if (!isAdded || _binding == null) return
+                    setRequestLoading(false)
                     Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
                 }
             })
+    }
+
+    private fun verifyRegistrationOtp() {
+        val email = binding.etEmail.text.toString().trim()
+        val code = binding.etRegistrationOtp.text?.toString()?.trim().orEmpty()
+        if (code.length != 6 || !code.all(Char::isDigit)) {
+            binding.tilRegistrationOtp.error = "Enter the 6-digit code"
+            return
+        }
+
+        binding.tilRegistrationOtp.error = null
+        binding.btnVerifyRegistrationOtp.isEnabled = false
+        binding.btnResendRegistrationOtp.isEnabled = false
+        RetrofitClient.instance.verifyRegistrationOtp(mapOf("email" to email, "code" to code))
+            .enqueue(object : Callback<AuthResponse> {
+                override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                    if (!isAdded || _binding == null) return
+                    binding.btnVerifyRegistrationOtp.isEnabled = true
+                    renderResendCooldown()
+                    val result = response.body() ?: parseError(response)
+                    if (response.isSuccessful && result?.success == true) {
+                        resendTimer?.cancel()
+                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                        findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
+                    } else {
+                        binding.tilRegistrationOtp.error =
+                            result?.message ?: "Could not verify the code"
+                    }
+                }
+
+                override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
+                    if (!isAdded || _binding == null) return
+                    binding.btnVerifyRegistrationOtp.isEnabled = true
+                    renderResendCooldown()
+                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+                }
+            })
+    }
+
+    private fun parseError(response: Response<AuthResponse>): AuthResponse? {
+        val body = response.errorBody()?.string() ?: return null
+        return try {
+            Gson().fromJson(body, AuthResponse::class.java)
+        } catch (_: com.google.gson.JsonSyntaxException) {
+            null
+        }
+    }
+
+    private fun setRequestLoading(loading: Boolean) {
+        binding.btnCreateAccount.isEnabled = !loading
+        binding.btnResendRegistrationOtp.isEnabled = !loading && resendMillisRemaining == 0L
+        setRegistrationFieldsEnabled(
+            !loading && binding.registrationOtpPanel.visibility != View.VISIBLE
+        )
+    }
+
+    private fun setRegistrationFieldsEnabled(enabled: Boolean) {
+        binding.etFirstName.isEnabled = enabled
+        binding.etLastName.isEnabled = enabled
+        binding.etEmail.isEnabled = enabled
+        binding.etIDNumber.isEnabled = enabled
+        binding.etYearLevel.isEnabled = enabled
+        binding.etPassword.isEnabled = enabled
+        binding.etConfirmPassword.isEnabled = enabled
+    }
+
+    private fun startResendCooldown(seconds: Int) {
+        resendTimer?.cancel()
+        resendMillisRemaining = seconds.coerceAtLeast(0) * 1_000L
+        renderResendCooldown()
+        if (resendMillisRemaining == 0L) return
+        resendTimer = object : CountDownTimer(resendMillisRemaining, 1_000L) {
+            override fun onTick(millisUntilFinished: Long) {
+                resendMillisRemaining = millisUntilFinished
+                renderResendCooldown()
+            }
+
+            override fun onFinish() {
+                resendMillisRemaining = 0L
+                resendTimer = null
+                renderResendCooldown()
+            }
+        }.start()
+    }
+
+    private fun renderResendCooldown() {
+        if (_binding == null) return
+        if (resendMillisRemaining > 0L) {
+            val seconds = (resendMillisRemaining + 999L) / 1_000L
+            binding.btnResendRegistrationOtp.text =
+                getString(R.string.resend_otp_countdown, seconds)
+            binding.btnResendRegistrationOtp.isEnabled = false
+        } else {
+            binding.btnResendRegistrationOtp.setText(R.string.resend_otp)
+            binding.btnResendRegistrationOtp.isEnabled = true
         }
     }
 
@@ -178,6 +306,8 @@ class RegisterFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        resendTimer?.cancel()
+        resendTimer = null
         super.onDestroyView()
         _binding = null
     }

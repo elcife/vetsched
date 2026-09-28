@@ -259,7 +259,7 @@ class ScheduleFragment : Fragment() {
                     false
                 )
                 
-                cardBinding.tvTimeRange.text = course.timeRange
+                cardBinding.tvTimeRange.text = ScheduleTimeRange.format(course.timeRange)
                 cardBinding.tvSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
                 cardBinding.tvCourseName.text = course.courseName
                 cardBinding.tvLocation.text = course.room
@@ -282,74 +282,51 @@ class ScheduleFragment : Fragment() {
                     findNavController().navigate(R.id.action_scheduleFragment_to_coursesFragment, bundle)
                 }
 
-                val timeInfo = parseTimeRange(course.timeRange)
+                val timeInfo = ScheduleTimeRange.parse(course.timeRange) ?: return
                 val density = itemBinding.root.resources.displayMetrics.density
-                
-                val marginTopDp = (timeInfo.startMinutes - 7 * 60) * 80 / 60
-                val heightDp = Math.max(80, timeInfo.durationMinutes * 80 / 60)
+                val timelineStartMinutes = 7 * 60
+                val timelineEndMinutes = 19 * 60
+                val visibleStart = timeInfo.startMinutes.coerceAtLeast(timelineStartMinutes)
+                val visibleEnd = timeInfo.endMinutes.coerceAtMost(timelineEndMinutes)
+                if (visibleStart >= visibleEnd) return
+                val hourHeight = itemBinding.root.resources.getDimension(R.dimen.schedule_timeline_hour_height)
+                val labelWidth = itemBinding.root.resources.getDimension(R.dimen.schedule_timeline_label_width)
+                val markerOffset = itemBinding.root.resources.getDimension(R.dimen.schedule_timeline_marker_offset)
+                val lineOverlap = itemBinding.root.resources.getDimension(R.dimen.schedule_timeline_card_line_overlap)
+                val topMargin = markerOffset - lineOverlap +
+                    (visibleStart - timelineStartMinutes) * hourHeight / 60f
+                val cardHeight = ((visibleEnd - visibleStart) * hourHeight / 60f + 2 * lineOverlap).coerceAtLeast(
+                    itemBinding.root.resources.displayMetrics.density * 40f
+                )
 
                 val params = ConstraintLayout.LayoutParams(
                     ConstraintLayout.LayoutParams.MATCH_CONSTRAINT,
-                    (heightDp * density).toInt()
+                    cardHeight.toInt()
                 )
                 params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
                 params.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                 params.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
-                params.marginStart = (64 * density).toInt()
-                params.marginEnd = (16 * density).toInt()
-                params.topMargin = (marginTopDp * density).toInt()
+                params.marginStart = labelWidth.toInt()
+                params.marginEnd = 0
+                params.topMargin = topMargin.toInt()
                 
                 cardBinding.root.layoutParams = params
+                cardBinding.root.setBackgroundResource(R.drawable.bg_schedule_card)
+                cardBinding.root.elevation = 4 * density
                 itemBinding.cardsContainer.addView(cardBinding.root)
             }
 
-            private fun parseTimeRange(range: String): TimeInfo {
-                val parts = range.split("-", "/")
-                val startStr = parts[0].trim()
-                val endStr = parts[1].trim()
-                
-                val endMin = timeToMinutes(endStr)
-                var startMin = timeToMinutes(startStr)
-                
-                if (!startStr.contains("AM", true) && !startStr.contains("PM", true)) {
-                    if (endMin >= 12 * 60) {
-                        val startHour = startStr.split(":")[0].toInt()
-                        if (startHour < 7 || startHour < (endMin / 60 % 12)) {
-                            if (startMin + 12 * 60 <= endMin) {
-                                startMin += 12 * 60
-                            }
-                        }
-                    }
-                }
-                
-                if (startMin >= endMin && startMin >= 12 * 60) {
-                    startMin -= 12 * 60
-                }
-                
-                return TimeInfo(startMin, Math.max(60, endMin - startMin))
-            }
-
-            private fun timeToMinutes(time: String): Int {
-                val cleanTime = time.replace("AM", "", true).replace("PM", "", true).trim()
-                val hm = cleanTime.split(":")
-                var h = hm[0].toInt()
-                val m = if (hm.size > 1) {
-                    val mm = hm[1].split(" ")
-                    if (mm.isNotEmpty()) mm[0].toInt() else 0
-                } else 0
-                
-                if (time.contains("PM", true) && h < 12) h += 12
-                if (time.contains("AM", true) && h == 12) h = 0
-                
-                return h * 60 + m
-            }
         }
 
         private fun setupTimeline(itemBinding: ItemDayScheduleBinding) {
-            val times = listOf("7:00", "8:00", "9:00", "10:00", "11:00", "12:00", "1:00", "2:00", "3:00", "4:00", "5:00", "6:00")
-            val rows = listOf(itemBinding.row7, itemBinding.row8, itemBinding.row9, itemBinding.row10, itemBinding.row11, itemBinding.row12, itemBinding.row1, itemBinding.row2, itemBinding.row3, itemBinding.row4, itemBinding.row5, itemBinding.row6)
-            
-            times.forEachIndexed { i, time -> rows[i].tvTime.text = time }
+            ScheduleTimelineLabels.bind(
+                listOf(
+                    itemBinding.row7, itemBinding.row8, itemBinding.row9,
+                    itemBinding.row10, itemBinding.row11, itemBinding.row12,
+                    itemBinding.row1, itemBinding.row2, itemBinding.row3,
+                    itemBinding.row4, itemBinding.row5, itemBinding.row6
+                )
+            )
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -363,5 +340,4 @@ class ScheduleFragment : Fragment() {
         override fun getItemCount(): Int = days.size
     }
 
-    data class TimeInfo(val startMinutes: Int, val durationMinutes: Int)
 }
