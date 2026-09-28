@@ -1,21 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="80dp"
-    android:gravity="center_vertical"
+    android:layout_height="wrap_content"
     android:orientation="horizontal">
 
-    <TextView
-        android:id="@+id/tvTime"
-        android:layout_width="60dp"
-        android:layout_height="wrap_content"
-        android:text="8:00"
-        android:textColor="@color/vetsched_text_hint"
-        android:textSize="12sp" />
+    <FrameLayout
+        android:layout_width="@dimen/schedule_timeline_label_width"
+        android:layout_height="@dimen/schedule_timeline_hour_height">
 
-    <View
+        <TextView
+            android:id="@+id/tvTime"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/schedule_timeline_label_height"
+            android:layout_gravity="top"
+            android:includeFontPadding="false"
+            android:gravity="center_vertical"
+            android:singleLine="true"
+            android:text="7:00 AM"
+            android:textColor="@color/vetsched_text_hint"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvHalfHour"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/schedule_timeline_label_height"
+            android:layout_gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:gravity="center_vertical"
+            android:singleLine="true"
+            android:text="7:30 AM"
+            android:textColor="@color/vetsched_text_hint"
+            android:textSize="10sp"
+            android:translationY="7dp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#E0E0E0" />
+        android:layout_height="@dimen/schedule_timeline_hour_height"
+        android:clipChildren="false">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:layout_gravity="top"
+            android:layout_marginTop="@dimen/schedule_timeline_marker_offset"
+            android:background="#CBD3CE" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_gravity="top"
+            android:layout_marginTop="@dimen/schedule_timeline_half_marker_offset"
+            android:background="#E3E8E5" />
+    </FrameLayout>
 
 </LinearLayout>

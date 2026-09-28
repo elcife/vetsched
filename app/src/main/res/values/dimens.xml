@@ -1,0 +1,8 @@
+<resources>
+    <dimen name="schedule_timeline_hour_height">80dp</dimen>
+    <dimen name="schedule_timeline_label_width">76dp</dimen>
+    <dimen name="schedule_timeline_marker_offset">7dp</dimen>
+    <dimen name="schedule_timeline_half_marker_offset">47dp</dimen>
+    <dimen name="schedule_timeline_label_height">14dp</dimen>
+    <dimen name="schedule_timeline_card_line_overlap">2dp</dimen>
+</resources>
