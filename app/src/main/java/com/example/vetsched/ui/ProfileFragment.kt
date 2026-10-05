@@ -47,10 +47,13 @@ class ProfileFragment : Fragment() {
         binding.tvProfileEmail.text = userEmail.ifBlank { "No email on file" }
         binding.tvProfileEmailDetail.text = "Email address\n${userEmail.ifBlank { "Not available" }}"
         binding.tvProfileStudentId.text = "Student ID\n${studentId.ifBlank { "Not available" }}"
-        binding.tvProfileYearLevel.text = if (yearLevel in 1..4) {
-            "Year level\n${yearLevel.ordinalSuffix()} year"
+        binding.tvProfileYearLevel.text = if (yearLevel in 1..5) {
+            "Year level (Tap to edit)\n${yearLevel.ordinalSuffix()} year"
         } else {
-            "Year level\nNot set"
+            "Year level (Tap to set)\nNot set"
+        }
+        binding.tvProfileYearLevel.setOnClickListener {
+            showEditYearLevelDialog()
         }
         binding.tvProfileInitials.text = userName
             .split(Regex("\\s+"))
@@ -68,17 +71,23 @@ class ProfileFragment : Fragment() {
                 .setPositiveButton("Log out") { _, _ ->
                     CourseRepository.clear(requireContext())
                     sharedPref.edit().clear().apply()
-                    findNavController().navigate(R.id.action_profileFragment_to_startFragment)
+                    if (findNavController().currentDestination?.id == R.id.profileFragment) {
+                        findNavController().navigate(R.id.action_profileFragment_to_startFragment)
+                    }
                 }
                 .show()
         }
 
         binding.btnSchedule.setOnClickListener {
-            findNavController().navigate(R.id.action_profileFragment_to_scheduleFragment)
+            if (findNavController().currentDestination?.id == R.id.profileFragment) {
+                findNavController().navigate(R.id.action_profileFragment_to_scheduleFragment)
+            }
         }
 
         binding.btnCourses.setOnClickListener {
-            findNavController().navigate(R.id.action_profileFragment_to_coursesFragment)
+            if (findNavController().currentDestination?.id == R.id.profileFragment) {
+                findNavController().navigate(R.id.action_profileFragment_to_coursesFragment)
+            }
         }
 
         binding.btnChangePassword.setOnClickListener {
@@ -94,7 +103,55 @@ class ProfileFragment : Fragment() {
         1 -> "1st"
         2 -> "2nd"
         3 -> "3rd"
-        else -> "4th"
+        4 -> "4th"
+        else -> "5th"
+    }
+
+    private fun showEditYearLevelDialog() {
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val userEmail = sharedPref.getString("userEmail", null)
+        if (userEmail.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "Error: User email not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year")
+        AlertDialog.Builder(requireContext())
+            .setTitle("Edit Year Level")
+            .setItems(yearLevels) { _, which ->
+                val newYearLevel = which + 1
+                updateYearLevelOnServer(userEmail, newYearLevel)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun updateYearLevelOnServer(email: String, newYearLevel: Int) {
+        val params = mapOf(
+            "email" to email,
+            "year_level" to newYearLevel.toString()
+        )
+
+        RetrofitClient.instance.updateYearLevel(params).enqueue(object : Callback<AuthResponse> {
+            override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                if (!isAdded || _binding == null) return
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+                    sharedPref.edit().putInt("userYearLevel", newYearLevel).apply()
+                    binding.tvProfileYearLevel.text = "Year level (Tap to edit)\n${newYearLevel.ordinalSuffix()} year"
+                    Toast.makeText(requireContext(), "Year level updated to ${newYearLevel.ordinalSuffix()} year!", Toast.LENGTH_SHORT).show()
+                } else {
+                    val msg = response.body()?.message ?: "Failed to update year level"
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
+                if (!isAdded || _binding == null) return
+                Toast.makeText(requireContext(), "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
     }
 
     private fun showResetScheduleWarning() {

@@ -68,11 +68,30 @@ class ScheduleFragment : Fragment() {
         }
 
         binding.btnSubmit.setOnClickListener {
-            findNavController().navigate(R.id.action_scheduleFragment_to_confirmScheduleFragment)
+            val enrolledList = CourseRepository.getAllEnrolled(requireContext())
+            if (enrolledList.isEmpty()) {
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("No Subjects Added")
+                    .setMessage("You must add at least one subject to your schedule before submitting.")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@setOnClickListener
+            }
+
+            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Submit Schedule")
+                .setMessage("Are you sure you want to submit your schedule?")
+                .setPositiveButton("Yes, Review Schedule") { _, _ ->
+                    if (findNavController().currentDestination?.id == R.id.scheduleFragment) {
+                        findNavController().navigate(R.id.action_scheduleFragment_to_confirmScheduleFragment)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         binding.ivNotification.setOnClickListener {
-            val yearLevel = sharedPref.getInt("userYearLevel", 1).coerceIn(1, 4)
+            val yearLevel = sharedPref.getInt("userYearLevel", 1).coerceIn(1, 5)
             NotificationCenter.loadUpdates(
                 requireContext(),
                 yearLevel,
@@ -96,7 +115,7 @@ class ScheduleFragment : Fragment() {
         val yearLevel = requireContext()
             .getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
             .getInt("userYearLevel", 0)
-        if (yearLevel in 1..4 && _binding != null) {
+        if (yearLevel in 1..5 && _binding != null) {
             refreshNotificationIndicator(yearLevel)
         }
     }
@@ -150,7 +169,7 @@ class ScheduleFragment : Fragment() {
     }
 
     private fun showYearLevelSelectionDialog() {
-        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year")
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year")
         androidx.appcompat.app.AlertDialog.Builder(requireContext())
             .setTitle("Select Your Year Level")
             .setMessage("We need to know your year level to show you the correct courses.")
@@ -330,7 +349,7 @@ class ScheduleFragment : Fragment() {
                 val timeInfo = ScheduleTimeRange.parse(course.timeRange) ?: return
                 val density = itemBinding.root.resources.displayMetrics.density
                 val timelineStartMinutes = 7 * 60
-                val timelineEndMinutes = 19 * 60
+                val timelineEndMinutes = 22 * 60
                 val visibleStart = timeInfo.startMinutes.coerceAtLeast(timelineStartMinutes)
                 val visibleEnd = timeInfo.endMinutes.coerceAtMost(timelineEndMinutes)
                 if (visibleStart >= visibleEnd) return
@@ -369,7 +388,8 @@ class ScheduleFragment : Fragment() {
                     itemBinding.row7, itemBinding.row8, itemBinding.row9,
                     itemBinding.row10, itemBinding.row11, itemBinding.row12,
                     itemBinding.row1, itemBinding.row2, itemBinding.row3,
-                    itemBinding.row4, itemBinding.row5, itemBinding.row6
+                    itemBinding.row4, itemBinding.row5, itemBinding.row6,
+                    itemBinding.row7pm, itemBinding.row8pm, itemBinding.row9pm
                 )
             )
         }

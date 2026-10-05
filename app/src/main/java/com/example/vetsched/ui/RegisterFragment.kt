@@ -127,6 +127,7 @@ class RegisterFragment : Fragment() {
             "2nd Year" -> 2
             "3rd Year" -> 3
             "4th Year" -> 4
+            "5th Year" -> 5
             else -> 0
         }
 
@@ -345,7 +346,7 @@ class RegisterFragment : Fragment() {
     }
 
     private fun setupYearLevelDropdown() {
-        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year")
+        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year")
         
         binding.etYearLevel.setOnClickListener {
             androidx.appcompat.app.AlertDialog.Builder(requireContext())

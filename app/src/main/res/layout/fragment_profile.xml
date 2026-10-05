@@ -139,16 +139,33 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
                 android:layout_marginTop="24dp"
                 android:layout_marginBottom="10dp"
-                android:text="ACADEMIC DETAILS"
-                android:textColor="@color/vetsched_text_hint"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:text="ACADEMIC DETAILS"
+                    android:textColor="@color/vetsched_text_hint"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:text="Tap below to edit"
+                    android:textColor="@color/vetsched_primary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tvProfileYearLevel"
@@ -169,8 +186,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:layout_marginTop="8dp"
-                android:text="Choose a year level in Courses to browse its offerings."
-                android:textColor="@color/vetsched_text_hint"
+                android:text="Tap year level above anytime to change your year level."
+                android:textColor="@color/vetsched_primary"
                 android:textSize="12sp" />
 
             <TextView

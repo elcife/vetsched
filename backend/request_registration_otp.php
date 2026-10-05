@@ -47,8 +47,8 @@ if ($email === null) {
 if ($studentId === null) {
     registrationRespond(400, false, "Student ID must contain 9 to 12 digits", "student_id");
 }
-if ($yearLevel < 1 || $yearLevel > 4) {
-    registrationRespond(400, false, "Year level must be between 1 and 4", "year_level");
+if ($yearLevel < 1 || $yearLevel > 5) {
+    registrationRespond(400, false, "Year level must be between 1 and 5", "year_level");
 }
 if (!vetschedHasAcceptedTerms($data["terms_accepted"] ?? null)) {
     registrationRespond(400, false, "Accept the Terms of Service before continuing");

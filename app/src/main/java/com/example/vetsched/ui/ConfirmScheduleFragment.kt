@@ -54,36 +54,44 @@ class ConfirmScheduleFragment : Fragment() {
         binding.btnBack.setOnClickListener {
             findNavController().navigateUp()
         }
-        
+
         if (previewCourses.isNotEmpty()) {
+            // Mode A: Section Enrollment preview (from CoursesFragment)
+            binding.btnExportPdf.visibility = View.GONE
             binding.btnYesSubmit.isEnabled = true
             binding.btnYesSubmit.setBackgroundColor(Color.parseColor("#77C647"))
             binding.btnYesSubmit.text = "Confirm Enrollment"
-            
+
             binding.btnYesSubmit.setOnClickListener {
                 enrollAllPreviews(0)
+            }
+        } else {
+            // Mode B: Schedule Submission & Review (from ScheduleFragment)
+            binding.btnExportPdf.visibility = View.VISIBLE
+            binding.btnExportPdf.setOnClickListener {
+                com.example.vetsched.util.SchedulePdfExporter.exportToPdf(requireContext())
+            }
+
+            binding.btnYesSubmit.isEnabled = true
+            binding.btnYesSubmit.setBackgroundColor(Color.parseColor("#5C6D4F"))
+            binding.btnYesSubmit.text = "Submit Schedule to Admin"
+
+            binding.btnYesSubmit.setOnClickListener {
+                Toast.makeText(context, "Schedule successfully submitted to Admin!", Toast.LENGTH_SHORT).show()
+                findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
             }
         }
     }
 
     private fun enrollAllPreviews(index: Int) {
         if (index >= previewCourses.size) {
-            Toast.makeText(context, "Enrollment completed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Enrollment completed!", Toast.LENGTH_SHORT).show()
             findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
             return
         }
-        
-        // Since one section has multiple slots but they share offeringIds, 
-        // we only need to call enroll ONCE per distinct section.
-        // However, EnrolledCourse represents a SLOT here.
-        // Let's just enroll the first one or ensure backend handles it.
-        // Actually, the current Repository logic takes one EnrolledCourse and sends its offeringIds.
-        
+
         CourseRepository.enroll(previewCourses[index], requireContext()) { success ->
             if (success) {
-                // If the section has multiple slots, they all share the same offeringIds,
-                // so the server will enroll the student in all of them at once.
-                // We don't need to loop if it's the same section.
                 Toast.makeText(context, "Enrolled in ${previewCourses[index].section}", Toast.LENGTH_SHORT).show()
                 findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
             } else {
@@ -238,7 +246,7 @@ class ConfirmScheduleFragment : Fragment() {
                 val timeInfo = ScheduleTimeRange.parse(course.timeRange) ?: return
                 val density = itemBinding.root.resources.displayMetrics.density
                 val timelineStartMinutes = 7 * 60
-                val timelineEndMinutes = 19 * 60
+                val timelineEndMinutes = 22 * 60
                 val visibleStart = timeInfo.startMinutes.coerceAtLeast(timelineStartMinutes)
                 val visibleEnd = timeInfo.endMinutes.coerceAtMost(timelineEndMinutes)
                 if (visibleStart >= visibleEnd) return
@@ -276,7 +284,8 @@ class ConfirmScheduleFragment : Fragment() {
                     itemBinding.row7, itemBinding.row8, itemBinding.row9,
                     itemBinding.row10, itemBinding.row11, itemBinding.row12,
                     itemBinding.row1, itemBinding.row2, itemBinding.row3,
-                    itemBinding.row4, itemBinding.row5, itemBinding.row6
+                    itemBinding.row4, itemBinding.row5, itemBinding.row6,
+                    itemBinding.row7pm, itemBinding.row8pm, itemBinding.row9pm
                 )
             )
         }

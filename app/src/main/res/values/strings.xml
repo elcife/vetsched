@@ -64,6 +64,7 @@
         <item>@string/year_2</item>
         <item>@string/year_3</item>
         <item>@string/year_4</item>
+        <item>@string/year_5</item>
     </string-array>
     <plurals name="course_count">
         <item quantity="one">%1$d course - Year %2$d</item>

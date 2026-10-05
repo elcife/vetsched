@@ -124,7 +124,7 @@ class CoursesFragment : Fragment() {
             "coursesYearLevel",
             sharedPref.getInt("userYearLevel", 1)
         )
-        selectedYearLevel = savedSelection.coerceIn(1, 4)
+        selectedYearLevel = savedSelection.coerceIn(1, 5)
 
         ArrayAdapter.createFromResource(
             requireContext(),
@@ -450,11 +450,31 @@ class CoursesFragment : Fragment() {
                                 ))
                             }
                         }
-                        
-                        val bundle = Bundle().apply {
-                            putString("preview_courses_json", Gson().toJson(previewSlots))
+
+                        val navigateToPreview = {
+                            val bundle = Bundle().apply {
+                                putString("preview_courses_json", Gson().toJson(previewSlots))
+                            }
+                            findNavController().navigate(R.id.action_coursesFragment_to_confirmScheduleFragment, bundle)
                         }
-                        findNavController().navigate(R.id.action_coursesFragment_to_confirmScheduleFragment, bundle)
+
+                        val existingEnrolled = CourseRepository.getAllEnrolled(requireContext())
+                            .firstOrNull { it.courseCode == subject.code }
+
+                        if (existingEnrolled != null) {
+                            androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                                .setTitle("Override Section")
+                                .setMessage("Are you sure you want to override your previously selected section?")
+                                .setPositiveButton("Override & Enroll") { _, _ ->
+                                    CourseRepository.remove(existingEnrolled, requireContext()) { _ ->
+                                        navigateToPreview()
+                                    }
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        } else {
+                            navigateToPreview()
+                        }
                     }
                 }
             }
