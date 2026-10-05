@@ -15,4 +15,13 @@
     <color name="vetsched_card_bg">#F1F4EE</color>
     <color name="vetsched_divider">#E0E0E0</color>
     <color name="vetsched_unselected_tab">#F5F5F5</color>
+    <color name="vetsched_warning">#B3261E</color>
+    <color name="vetsched_warning_background">#FFF1F0</color>
+    <color name="vetsched_warning_border">#E6A09A</color>
+    <color name="vetsched_closed">#A85D00</color>
+    <color name="vetsched_closed_background">#FFF4DE</color>
+    <color name="vetsched_closed_border">#E7C27A</color>
+    <color name="vetsched_open">#2E6B45</color>
+    <color name="vetsched_open_background">#EAF5EC</color>
+    <color name="vetsched_open_border">#A8D0B0</color>
 </resources>

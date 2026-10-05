@@ -3,6 +3,7 @@ package com.example.vetsched.data
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.example.vetsched.util.InputValidation
 
 data class EnrolledCourse(
     val day: String,
@@ -22,7 +23,8 @@ object CourseRepository {
 
     fun fetchEnrolled(context: Context, callback: (Boolean) -> Unit) {
         val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val studentId = sharedPref.getString("studentId", null) ?: return callback(false)
+        val studentId = sharedPref.getString("studentId", null)
+            ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
 
         com.example.vetsched.api.RetrofitClient.instance.getEnrolledCourses(studentId)
             .enqueue(object : retrofit2.Callback<List<EnrolledCourse>> {
@@ -49,11 +51,15 @@ object CourseRepository {
 
     fun enroll(course: EnrolledCourse, context: Context, callback: (Boolean) -> Unit) {
         val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val studentId = sharedPref.getString("studentId", null) ?: return callback(false)
+        val studentId = sharedPref.getString("studentId", null)
+            ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
+        val offeringIds = course.offeringIds
+            ?.takeIf { it.isNotEmpty() && it.all { id -> id > 0 } && it.distinct().size == it.size }
+            ?: return callback(false)
 
         val request = com.example.vetsched.api.models.EnrollmentRequest(
             studentId = studentId,
-            offeringIds = (course.offeringIds ?: emptyList<Int>())
+            offeringIds = offeringIds
         )
 
         com.example.vetsched.api.RetrofitClient.instance.enroll(request)
@@ -82,7 +88,8 @@ object CourseRepository {
 
     fun remove(course: EnrolledCourse, context: Context, callback: (Boolean) -> Unit) {
         val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val studentId = sharedPref.getString("studentId", null) ?: return callback(false)
+        val studentId = sharedPref.getString("studentId", null)
+            ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
 
         val ids = course.offeringIds
         if (ids.isNullOrEmpty()) {

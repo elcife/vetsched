@@ -19,16 +19,23 @@
             android:id="@+id/courseHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
             android:padding="20dp">
 
             <TextView
                 android:id="@+id/tvCourseCode"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="VETMED* 101"
                 android:textColor="@color/vetsched_text_primary"
                 android:textSize="18sp"
                 android:textStyle="bold"
+                app:layout_constraintEnd_toStartOf="@id/tvSectionCount"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
@@ -68,6 +75,16 @@
             android:padding="20dp"
             android:visibility="gone"
             tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/tvNoSections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="2dp"
+                android:text="@string/no_sections_available"
+                android:textColor="@color/vetsched_text_hint"
+                android:textSize="14sp"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/containerSections"

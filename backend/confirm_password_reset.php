@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require_once "db.php";
+require_once __DIR__ . "/input_validation.php";
 
 function respond($status, $success, $message) {
     http_response_code($status);
@@ -8,16 +9,16 @@ function respond($status, $success, $message) {
     exit;
 }
 
-$data = json_decode(file_get_contents("php://input"), true);
-$email = isset($data["email"]) ? strtolower(trim($data["email"])) : "";
-$code = isset($data["code"]) ? trim($data["code"]) : "";
-$password = isset($data["password"]) ? $data["password"] : "";
+$data = vetschedReadJsonRequest();
+$email = $data === null ? null : vetschedNormalizeEmail($data["email"] ?? null);
+$code = $data["code"] ?? null;
+$password = $data["password"] ?? null;
 
-if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^\d{6}$/', $code)) {
+if ($email === null || !vetschedIsValidOtp($code)) {
     respond(400, false, "Enter the registered email address and 6-digit code");
 }
-if (strlen($password) < 10) {
-    respond(400, false, "Password must be at least 10 characters");
+if (!vetschedIsValidPassword($password)) {
+    respond(400, false, "Password must contain 10 to 128 characters");
 }
 
 try {

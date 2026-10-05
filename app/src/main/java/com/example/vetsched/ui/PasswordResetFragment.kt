@@ -1,10 +1,11 @@
 package com.example.vetsched.ui
 
 import android.os.Bundle
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.CountDownTimer
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Patterns
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +16,7 @@ import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.databinding.FragmentPasswordResetBinding
+import com.example.vetsched.util.InputValidation
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import retrofit2.Call
@@ -39,6 +41,10 @@ class PasswordResetFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.tvBackToLogin.paintFlags =
+            binding.tvBackToLogin.paintFlags or Paint.UNDERLINE_TEXT_FLAG
+        binding.tvBackToLogin.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
         binding.tvBackToLogin.setOnClickListener {
             findNavController().popBackStack(R.id.loginFragment, false)
         }
@@ -70,8 +76,8 @@ class PasswordResetFragment : Fragment() {
     }
 
     private fun requestCode() {
-        val email = binding.etResetEmail.text?.toString()?.trim().orEmpty()
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        val email = InputValidation.normalizeEmail(binding.etResetEmail.text?.toString().orEmpty())
+        if (!InputValidation.isValidEmail(email)) {
             binding.etResetEmail.error = "Enter a valid email address"
             return
         }
@@ -87,10 +93,15 @@ class PasswordResetFragment : Fragment() {
                     val result = response.body() ?: parseError(response)
                     if (response.isSuccessful && result?.success == true) {
                         resetForEmail = email
+                        binding.etResetEmail.setText(email)
                         binding.resetFields.visibility = View.VISIBLE
                         binding.btnRequestCode.visibility = View.GONE
                         binding.tvResetMessage.setText(R.string.reset_code_sent_instructions)
+                        binding.etResetCode.text?.clear()
+                        binding.etNewPassword.text?.clear()
+                        binding.etConfirmNewPassword.text?.clear()
                         startCooldown()
+                        setLoading(false)
                         Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
                     } else {
                         showError(result?.message ?: "Could not send the verification code")
@@ -107,18 +118,26 @@ class PasswordResetFragment : Fragment() {
     }
 
     private fun resetPassword() {
-        val email = binding.etResetEmail.text?.toString()?.trim().orEmpty()
+        val email = InputValidation.normalizeEmail(binding.etResetEmail.text?.toString().orEmpty())
         val code = binding.etResetCode.text?.toString()?.trim().orEmpty()
         val password = binding.etNewPassword.text?.toString().orEmpty()
         val confirmPassword = binding.etConfirmNewPassword.text?.toString().orEmpty()
 
         when {
-            code.length != 6 || !code.all(Char::isDigit) -> {
+            !InputValidation.isValidEmail(email) -> {
+                binding.etResetEmail.error = "Enter a valid email address"
+                return
+            }
+            resetForEmail == null || !email.equals(resetForEmail, ignoreCase = true) -> {
+                showError("Request a verification code for this email first")
+                return
+            }
+            !InputValidation.isValidOtp(code) -> {
                 binding.etResetCode.error = "Enter the 6-digit code"
                 return
             }
-            password.length < 10 -> {
-                binding.etNewPassword.error = "Password must be at least 10 characters"
+            !InputValidation.isValidPassword(password) -> {
+                binding.etNewPassword.error = "Use 10-128 characters"
                 return
             }
             password != confirmPassword -> {
@@ -161,9 +180,13 @@ class PasswordResetFragment : Fragment() {
     }
 
     private fun setLoading(loading: Boolean) {
+        binding.etResetEmail.isEnabled = !loading
+        binding.etResetCode.isEnabled = !loading
+        binding.etNewPassword.isEnabled = !loading
+        binding.etConfirmNewPassword.isEnabled = !loading
         binding.btnRequestCode.isEnabled = !loading
         binding.btnResendCode.isEnabled = !loading && cooldownMillisRemaining == 0L
-        binding.btnResetPassword.isEnabled = !loading
+        binding.btnResetPassword.isEnabled = !loading && resetForEmail != null
     }
 
     private fun startCooldown() {
@@ -209,6 +232,7 @@ class PasswordResetFragment : Fragment() {
         binding.etConfirmNewPassword.text?.clear()
         binding.tvResetMessage.setText(R.string.reset_password_instructions)
         renderCooldown()
+        setLoading(false)
     }
 
     private fun showError(message: String) {

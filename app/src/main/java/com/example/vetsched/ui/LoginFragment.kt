@@ -1,6 +1,8 @@
 package com.example.vetsched.ui
 
 import android.content.Context
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -12,6 +14,7 @@ import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.databinding.FragmentLoginBinding
+import com.example.vetsched.util.InputValidation
 import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
@@ -34,6 +37,15 @@ class LoginFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        binding.btnBack.setOnClickListener {
+            findNavController().popBackStack()
+        }
+
+        listOf(binding.tvRegister, binding.tvForgotPassword).forEach { textView ->
+            textView.paintFlags = textView.paintFlags or Paint.UNDERLINE_TEXT_FLAG
+            textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+
         binding.tvRegister.setOnClickListener {
             findNavController().navigate(R.id.action_loginFragment_to_registerFragment)
         }
@@ -43,10 +55,14 @@ class LoginFragment : Fragment() {
         }
 
         binding.btnLogin.setOnClickListener {
-            val email = binding.etEmail.text.toString().trim()
+            val email = InputValidation.normalizeEmail(binding.etEmail.text.toString())
             val password = binding.etPassword.text.toString()
 
-            if (email.isEmpty() || password.isEmpty()) {
+            if (!InputValidation.isValidEmail(email)) {
+                binding.etEmail.error = "Enter a valid email address"
+                return@setOnClickListener
+            }
+            if (!InputValidation.isPasswordWithinLimit(password)) {
                 Toast.makeText(requireContext(), "Enter email and password", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }

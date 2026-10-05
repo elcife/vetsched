@@ -32,16 +32,31 @@
         app:layout_constraintTop_toTopOf="@id/tvHeaderTitle"
         app:tint="@color/vetsched_text_primary" />
 
+    <View
+        android:id="@+id/viewNotificationIndicator"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:layout_marginTop="1dp"
+        android:layout_marginEnd="1dp"
+        android:background="@drawable/bg_notification_dot"
+        android:contentDescription="Unread notifications"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/ivNotification"
+        app:layout_constraintTop_toTopOf="@id/ivNotification"
+        tools:visibility="visible" />
+
     <TextView
         android:id="@+id/tvAvailableCourses"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginTop="32dp"
+        android:layout_marginEnd="8dp"
         android:text="AVAILABLE COURSES"
         android:textColor="@color/vetsched_text_primary"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@id/tvFoundCount"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvHeaderTitle" />
 
@@ -51,26 +66,58 @@
         android:layout_height="wrap_content"
         android:layout_marginEnd="24dp"
         android:background="@drawable/bg_found_badge"
-        android:paddingHorizontal="14dp"
+        android:paddingHorizontal="10dp"
         android:paddingVertical="5dp"
         android:text=""
         android:textColor="#757575"
-        android:textSize="12sp"
-        app:layout_constraintBottom_toBottomOf="@id/tvAvailableCourses"
+        android:textSize="11sp"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="@id/tvAvailableCourses"
         app:layout_constraintTop_toTopOf="@id/tvAvailableCourses"
-        tools:text="7 Found" />
+        tools:text="7 courses - Year 4" />
+
+    <LinearLayout
+        android:id="@+id/yearLevelRow"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvFoundCount">
+
+        <TextView
+            android:id="@+id/tvYearLevelLabel"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:text="@string/year_level"
+            android:textColor="@color/vetsched_text_primary"
+            android:textSize="16sp" />
+
+        <Spinner
+            android:id="@+id/spinnerYearLevel"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:contentDescription="@string/select_year_level"
+            android:minWidth="152dp"
+            android:spinnerMode="dropdown" />
+    </LinearLayout>
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/searchBar"
         android:layout_width="0dp"
         android:layout_height="56dp"
         android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/bg_field_rounded"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvAvailableCourses">
+        app:layout_constraintTop_toBottomOf="@id/yearLevelRow">
 
         <EditText
             android:id="@+id/etSearch"

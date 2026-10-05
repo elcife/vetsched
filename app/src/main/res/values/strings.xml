@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">VETSCHED</string>
     <string name="welcome_back">Welcome Back</string>
+    <string name="back">Back</string>
     <string name="student_email">Student Email</string>
     <string name="password">Password</string>
     <string name="forgot_password">Forgot Password?</string>
@@ -45,9 +46,31 @@
 
     <string name="year_level">Year Level</string>
     <string name="select_year_level">Select Year Level</string>
+    <string name="accept_terms">I have read and agree to the Terms of Service.</string>
+    <string name="read_terms">Read Terms of Service</string>
+    <string name="terms_required">Please accept the Terms of Service before continuing.</string>
+    <string name="terms_of_service_title">VETSCHED Terms of Service</string>
+    <string name="close">Close</string>
+    <string name="terms_of_service_body">Last updated: October 5, 2026\n\n1. Using VETSCHED\nVETSCHED provides tools to browse course offerings and plan a class schedule. By creating an account or using the app, you agree to these Terms. If you do not agree, do not register or use the service.\n\n2. Schedule information and decisions\nCourse, section, seat availability, instructor, room, and schedule information may be incomplete, delayed, or changed by the institution. VETSCHED is a planning aid only and does not enroll you in a course unless the app explicitly confirms that action. You are responsible for checking official university systems and confirming registration, deadlines, prerequisites, fees, and final schedules with the institution. Do not rely on VETSCHED as the sole source for academic or enrollment decisions.\n\n3. Your account and use of the service\nYou are responsible for providing accurate registration details, keeping your sign-in credentials secure, and all activity performed through your account. Use the app lawfully and do not impersonate another person, disrupt the service, or attempt unauthorized access. Contact the app team promptly if you believe your account has been accessed without permission.\n\n4. Availability and changes\nWe may update, suspend, or discontinue features and may correct or remove information when needed. We aim to keep the service available and information useful, but do not guarantee uninterrupted access, error-free operation, or that course information will always be current or complete.\n\n5. Disclaimer and limits of responsibility\nTo the extent permitted by applicable law, VETSCHED is provided on an as-is and as-available basis, without guarantees of accuracy, availability, or fitness for a particular purpose. We are not responsible for decisions or actions you take based on app information, missed enrollment opportunities, changes made by the institution, or losses resulting from service interruptions or inaccurate or outdated data. Nothing in these Terms excludes or limits liability where applicable law does not allow it, including liability for rights that cannot legally be waived.\n\n6. Privacy\nRegistration information is used to provide and maintain your account and app features. Do not enter information that is not requested. Our collection and handling of personal information must also follow the privacy notice and applicable data-protection laws.\n\n7. Changes to these Terms\nWe may revise these Terms as the service changes. We will make the updated Terms available in the app and indicate when they take effect. If your consent is required for a material change, we will request it before you continue using the affected service.\n\n8. Contact\nFor questions or concerns about these Terms or the service, contact the VETSCHED app team through the support channel provided by your institution.\n\nThese Terms are a general service notice and are not a substitute for advice from a qualified legal professional. Applicable consumer, privacy, and other legal rights remain unaffected.</string>
+    <string name="no_sections_short">No sections</string>
+    <string name="no_sections_available">No sections are currently available for this course. Please check back later.</string>
     <string name="year_1">1st Year</string>
     <string name="year_2">2nd Year</string>
     <string name="year_3">3rd Year</string>
     <string name="year_4">4th Year</string>
     <string name="year_5">5th Year</string>
+    <string-array name="year_levels">
+        <item>@string/year_1</item>
+        <item>@string/year_2</item>
+        <item>@string/year_3</item>
+        <item>@string/year_4</item>
+    </string-array>
+    <plurals name="course_count">
+        <item quantity="one">%1$d course - Year %2$d</item>
+        <item quantity="other">%1$d courses - Year %2$d</item>
+    </plurals>
+    <plurals name="section_count">
+        <item quantity="one">%1$d section</item>
+        <item quantity="other">%1$d sections</item>
+    </plurals>
 </resources>

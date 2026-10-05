@@ -2,12 +2,9 @@ package com.example.vetsched.ui
 
 import android.content.Context
 import android.os.Bundle
-import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
@@ -16,7 +13,9 @@ import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.data.CourseRepository
+import com.example.vetsched.databinding.DialogChangePasswordBinding
 import com.example.vetsched.databinding.FragmentProfileBinding
+import com.example.vetsched.util.InputValidation
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -39,16 +38,39 @@ class ProfileFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val userName = sharedPref.getString("userName", "User")
+        val userName = sharedPref.getString("userName", "User").orEmpty()
+            .takeIf(String::isNotBlank) ?: "Student"
+        val userEmail = sharedPref.getString("userEmail", "").orEmpty()
+        val studentId = sharedPref.getString("studentId", "").orEmpty()
+        val yearLevel = sharedPref.getInt("userYearLevel", 0)
         binding.tvUserNameProfile.text = userName
+        binding.tvProfileEmail.text = userEmail.ifBlank { "No email on file" }
+        binding.tvProfileEmailDetail.text = "Email address\n${userEmail.ifBlank { "Not available" }}"
+        binding.tvProfileStudentId.text = "Student ID\n${studentId.ifBlank { "Not available" }}"
+        binding.tvProfileYearLevel.text = if (yearLevel in 1..4) {
+            "Year level\n${yearLevel.ordinalSuffix()} year"
+        } else {
+            "Year level\nNot set"
+        }
+        binding.tvProfileInitials.text = userName
+            .split(Regex("\\s+"))
+            .filter(String::isNotBlank)
+            .take(2)
+            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+            .joinToString("")
+            .ifBlank { "VS" }
 
         binding.btnLogout.setOnClickListener {
-            with(sharedPref.edit()) {
-                putBoolean("isLoggedIn", false)
-                putString("userName", null)
-                apply()
-            }
-            findNavController().navigate(R.id.action_profileFragment_to_startFragment)
+            AlertDialog.Builder(requireContext())
+                .setTitle("Log out?")
+                .setMessage("Are you sure you want to log out of your VETSCHED account?")
+                .setNegativeButton("Stay logged in", null)
+                .setPositiveButton("Log out") { _, _ ->
+                    CourseRepository.clear(requireContext())
+                    sharedPref.edit().clear().apply()
+                    findNavController().navigate(R.id.action_profileFragment_to_startFragment)
+                }
+                .show()
         }
 
         binding.btnSchedule.setOnClickListener {
@@ -63,13 +85,16 @@ class ProfileFragment : Fragment() {
             showChangePasswordDialog()
         }
 
-        binding.btnChangeYearLevel.setOnClickListener {
-            showChangeYearLevelWarning()
-        }
-
         binding.btnResetSchedule.setOnClickListener {
             showResetScheduleWarning()
         }
+    }
+
+    private fun Int.ordinalSuffix(): String = when (this) {
+        1 -> "1st"
+        2 -> "2nd"
+        3 -> "3rd"
+        else -> "4th"
     }
 
     private fun showResetScheduleWarning() {
@@ -84,131 +109,98 @@ class ProfileFragment : Fragment() {
             .show()
     }
 
-    private fun showChangeYearLevelWarning() {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Change Year Level")
-            .setMessage("Are you sure, Changing year level may affect your schedule and erase all your schedule data.")
-            .setPositiveButton("Yes") { _, _ ->
-                showYearLevelSelectionDialog()
-            }
-            .setNegativeButton("No", null)
-            .show()
-    }
-
-    private fun showYearLevelSelectionDialog() {
-        val yearLevels = arrayOf("1st Year", "2nd Year", "3rd Year", "4th Year")
-        AlertDialog.Builder(requireContext())
-            .setTitle("Select New Year Level")
-            .setItems(yearLevels) { _, which ->
-                val yearLevelInt = which + 1
-                updateYearLevelOnServer(yearLevelInt.toString())
-            }
-            .show()
-    }
-
-    private fun updateYearLevelOnServer(yearLevel: String) {
-        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val userEmail = sharedPref.getString("userEmail", null)
-
-        if (userEmail == null) {
-            Toast.makeText(requireContext(), "Error: User email not found", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val params = mapOf(
-            "email" to userEmail,
-            "year_level" to yearLevel
-        )
-
-        RetrofitClient.instance.updateYearLevel(params).enqueue(object : Callback<AuthResponse> {
-            override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
-                if (!isAdded || _binding == null) return
-
-                if (response.isSuccessful && response.body()?.success == true) {
-                    sharedPref.edit().putInt("userYearLevel", yearLevel.toInt()).apply()
-                    Toast.makeText(context, "Year level updated successfully!", Toast.LENGTH_SHORT).show()
-                } else {
-                    val msg = response.body()?.message ?: "Update failed"
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                if (!isAdded || _binding == null) return
-                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
-            }
-        })
-    }
-
     private fun showChangePasswordDialog() {
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val userEmail = sharedPref.getString("userEmail", null)
 
-        if (userEmail == null) {
+        if (userEmail == null || !InputValidation.isValidEmail(userEmail)) {
             Toast.makeText(requireContext(), "Error: User email not found", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val builder = AlertDialog.Builder(requireContext())
-        builder.setTitle("Change Password")
-        
-        val layout = LinearLayout(requireContext())
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(48, 24, 48, 24)
+        val dialogBinding = DialogChangePasswordBinding.inflate(layoutInflater)
+        val dialog = AlertDialog.Builder(requireContext())
+            .setTitle("Change password")
+            .setView(dialogBinding.root)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Update", null)
+            .create()
 
-        val etOldPassword = EditText(requireContext())
-        etOldPassword.hint = "Old Password"
-        etOldPassword.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        layout.addView(etOldPassword)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val oldPass = dialogBinding.etOldPassword.text?.toString().orEmpty()
+                val newPass = dialogBinding.etNewPassword.text?.toString().orEmpty()
+                val confirmPass = dialogBinding.etConfirmNewPassword.text?.toString().orEmpty()
 
-        val etNewPassword = EditText(requireContext())
-        etNewPassword.hint = "New Password"
-        etNewPassword.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        layout.addView(etNewPassword)
-
-        builder.setView(layout)
-
-        builder.setPositiveButton("Update") { dialog, _ ->
-            val oldPass = etOldPassword.text.toString()
-            val newPass = etNewPassword.text.toString()
-
-            if (oldPass.isEmpty() || newPass.isEmpty()) {
-                Toast.makeText(requireContext(), "Both passwords are required", Toast.LENGTH_SHORT).show()
-                return@setPositiveButton
-            }
-
-            if (newPass.length < 10) {
-                Toast.makeText(requireContext(), "New password must be at least 10 characters", Toast.LENGTH_SHORT).show()
-                return@setPositiveButton
-            }
-
-            val params = mapOf(
-                "email" to userEmail,
-                "old_password" to oldPass,
-                "new_password" to newPass
-            )
-
-            RetrofitClient.instance.changePassword(params).enqueue(object : Callback<AuthResponse> {
-                override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
-                    if (!isAdded || _binding == null) return
-
-                    if (response.isSuccessful && response.body()?.success == true) {
-                        Toast.makeText(context, "Password updated successfully!", Toast.LENGTH_SHORT).show()
-                        dialog.dismiss()
-                    } else {
-                        val msg = response.body()?.message ?: "Update failed"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                when {
+                    !InputValidation.isPasswordWithinLimit(oldPass) -> {
+                        dialogBinding.etOldPassword.error = "Enter your current password"
                     }
+                    !InputValidation.isValidPassword(newPass) -> {
+                        dialogBinding.etNewPassword.error = "Use 10-128 characters"
+                    }
+                    newPass == oldPass -> {
+                        dialogBinding.etNewPassword.error = "Choose a password different from your current one"
+                    }
+                    confirmPass != newPass -> {
+                        dialogBinding.etConfirmNewPassword.error = "Passwords do not match"
+                    }
+                    else -> updatePassword(
+                        userEmail,
+                        oldPass,
+                        newPass,
+                        dialog
+                    )
                 }
-
-                override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                    if (!isAdded || _binding == null) return
-                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
-                }
-            })
+            }
         }
-        builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
-        builder.show()
+        dialog.show()
+    }
+
+    private fun updatePassword(
+        email: String,
+        oldPassword: String,
+        newPassword: String,
+        dialog: AlertDialog
+    ) {
+        val updateButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        updateButton.isEnabled = false
+        updateButton.text = "Updating…"
+        val params = mapOf(
+            "email" to email,
+            "old_password" to oldPassword,
+            "new_password" to newPassword
+        )
+
+        RetrofitClient.instance.changePassword(params).enqueue(object : Callback<AuthResponse> {
+            override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                if (!isAdded || _binding == null) return
+                val result = response.body()
+                if (response.isSuccessful && result?.success == true) {
+                    Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                    dialog.dismiss()
+                } else {
+                    updateButton.isEnabled = true
+                    updateButton.text = "Update"
+                    Toast.makeText(
+                        context,
+                        result?.message ?: "Could not update password",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+
+            override fun onFailure(call: Call<AuthResponse>, error: Throwable) {
+                if (!isAdded || _binding == null) return
+                updateButton.isEnabled = true
+                updateButton.text = "Update"
+                Toast.makeText(
+                    context,
+                    "Network error: ${error.localizedMessage ?: "Please try again"}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        })
     }
 
     override fun onDestroyView() {

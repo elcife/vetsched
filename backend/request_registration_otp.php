@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/emailjs_mailer.php";
+require_once __DIR__ . "/input_validation.php";
 
 function registrationRespond(
     $status,
@@ -20,33 +21,40 @@ function registrationRespond(
     exit;
 }
 
-$data = json_decode(file_get_contents("php://input"), true);
-if (!is_array($data)) {
+$data = vetschedReadJsonRequest();
+if ($data === null) {
     registrationRespond(400, false, "Invalid request data");
 }
 
-$firstName = trim((string) ($data["first_name"] ?? ""));
-$lastName = trim((string) ($data["last_name"] ?? ""));
-$email = strtolower(trim((string) ($data["email"] ?? "")));
-$studentId = preg_replace('/\D/', '', (string) ($data["student_id"] ?? ""));
+$firstName = vetschedNormalizeName($data["first_name"] ?? null);
+$lastName = vetschedNormalizeName($data["last_name"] ?? null);
+$email = vetschedNormalizeEmail($data["email"] ?? null);
+$studentId = vetschedNormalizeStudentId($data["student_id"] ?? null);
 $yearLevel = filter_var($data["year_level"] ?? null, FILTER_VALIDATE_INT);
-$password = (string) ($data["password"] ?? "");
+$password = $data["password"] ?? null;
 
-if ($firstName === "" || $lastName === "" || $email === "" || $studentId === "" ||
-    $yearLevel === false || $password === "") {
+if (!is_string($data["first_name"] ?? null) || !is_string($data["last_name"] ?? null) ||
+    !is_string($data["email"] ?? null) || !is_string($data["student_id"] ?? null) ||
+    $yearLevel === false || !is_string($password) || $password === "") {
     registrationRespond(400, false, "All fields are required");
 }
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+if ($firstName === null || $lastName === null) {
+    registrationRespond(400, false, "Names must be 1 to 80 characters", "first_name");
+}
+if ($email === null) {
     registrationRespond(400, false, "Enter a valid email address", "email");
 }
-if (strlen($studentId) < 9 || strlen($studentId) > 12) {
+if ($studentId === null) {
     registrationRespond(400, false, "Student ID must contain 9 to 12 digits", "student_id");
 }
 if ($yearLevel < 1 || $yearLevel > 4) {
     registrationRespond(400, false, "Year level must be between 1 and 4", "year_level");
 }
-if (strlen($password) < 10) {
-    registrationRespond(400, false, "Password must be at least 10 characters");
+if (!vetschedHasAcceptedTerms($data["terms_accepted"] ?? null)) {
+    registrationRespond(400, false, "Accept the Terms of Service before continuing");
+}
+if (!vetschedIsValidPassword($password)) {
+    registrationRespond(400, false, "Password must contain 10 to 128 characters");
 }
 
 try {

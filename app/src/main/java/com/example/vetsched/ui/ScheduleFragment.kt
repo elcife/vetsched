@@ -19,6 +19,8 @@ import com.example.vetsched.data.EnrolledCourse
 import com.example.vetsched.databinding.FragmentScheduleBinding
 import com.example.vetsched.databinding.ItemDayScheduleBinding
 import com.example.vetsched.databinding.ItemScheduleCardBinding
+import com.example.vetsched.notifications.NotificationCenter
+import com.example.vetsched.notifications.NotificationInbox
 
 class ScheduleFragment : Fragment() {
 
@@ -52,6 +54,9 @@ class ScheduleFragment : Fragment() {
 
         setupTabs()
         checkYearLevel()
+        sharedPref.getInt("userYearLevel", 0)
+            .takeIf { it in 1..4 }
+            ?.let { NotificationCenter.initializeBaselineFromServer(requireContext(), it) }
         // removed redundant loadEnrolledData() as onResume will handle it
 
         binding.btnProfile.setOnClickListener {
@@ -65,12 +70,47 @@ class ScheduleFragment : Fragment() {
         binding.btnSubmit.setOnClickListener {
             findNavController().navigate(R.id.action_scheduleFragment_to_confirmScheduleFragment)
         }
+
+        binding.ivNotification.setOnClickListener {
+            val yearLevel = sharedPref.getInt("userYearLevel", 1).coerceIn(1, 4)
+            NotificationCenter.loadUpdates(
+                requireContext(),
+                yearLevel,
+                markAsRead = true
+            ) { updates, error ->
+                if (!isAdded || _binding == null) return@loadUpdates
+                if (error != null) {
+                    Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
+                } else {
+                    binding.viewNotificationIndicator.visibility = View.GONE
+                    NotificationInbox.show(requireContext(), updates.orEmpty())
+                }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // Only fetch if memory is empty or we just came back from enrollment
         loadEnrolledData()
+        val yearLevel = requireContext()
+            .getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+            .getInt("userYearLevel", 0)
+        if (yearLevel in 1..4 && _binding != null) {
+            refreshNotificationIndicator(yearLevel)
+        }
+    }
+
+    private fun refreshNotificationIndicator(yearLevel: Int) {
+        binding.viewNotificationIndicator.visibility =
+            if (NotificationCenter.hasUnread(requireContext(), yearLevel)) View.VISIBLE else View.GONE
+        NotificationCenter.loadUpdates(requireContext(), yearLevel) { _, error ->
+            if (!isAdded || _binding == null) return@loadUpdates
+            if (error == null) {
+                binding.viewNotificationIndicator.visibility =
+                    if (NotificationCenter.hasUnread(requireContext(), yearLevel)) View.VISIBLE else View.GONE
+            }
+        }
     }
 
     private fun loadEnrolledData() {
@@ -145,6 +185,11 @@ class ScheduleFragment : Fragment() {
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     sharedPref.edit().putInt("userYearLevel", yearLevel.toInt()).apply()
+                    NotificationCenter.initializeBaselineFromServer(
+                        requireContext(),
+                        yearLevel.toInt()
+                    )
+                    refreshNotificationIndicator(yearLevel.toInt())
                     Toast.makeText(context, "Year level updated!", Toast.LENGTH_SHORT).show()
                 } else {
                     val msg = response.body()?.message ?: "Update failed"

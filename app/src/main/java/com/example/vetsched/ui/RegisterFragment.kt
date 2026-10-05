@@ -2,18 +2,24 @@ package com.example.vetsched.ui
 
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.graphics.Paint
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.Typeface
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.example.vetsched.R
 import com.example.vetsched.api.RetrofitClient
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.databinding.FragmentRegisterBinding
+import com.example.vetsched.util.InputValidation
 import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
@@ -40,6 +46,19 @@ class RegisterFragment : Fragment() {
 
         setupYearLevelDropdown()
         setupErrorClearing()
+
+        binding.btnBack.setOnClickListener {
+            findNavController().popBackStack()
+        }
+
+        binding.cbAcceptTerms.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) binding.tvTermsError.visibility = View.GONE
+        }
+        binding.tvReadTerms.setOnClickListener {
+            showTermsOfService()
+        }
+        listOf(binding.tvReadTerms, binding.tvLogin, binding.btnEditRegistration)
+            .forEach(::styleClickableText)
 
         binding.tvLogin.setOnClickListener {
             findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
@@ -74,19 +93,32 @@ class RegisterFragment : Fragment() {
     private fun validatedRegistrationParams(): Map<String, String>? {
         clearAllErrors()
 
-        val firstName = binding.etFirstName.text.toString().trim()
-        val lastName = binding.etLastName.text.toString().trim()
-        val email = binding.etEmail.text.toString().trim()
+        if (!requireTermsAcceptance()) return null
+
+        val firstName = InputValidation.normalizeName(binding.etFirstName.text.toString())
+        val lastName = InputValidation.normalizeName(binding.etLastName.text.toString())
+        val emailInput = binding.etEmail.text.toString()
+        val email = InputValidation.normalizeEmail(emailInput)
         val idNumber = binding.etIDNumber.text.toString().trim()
-        val studentID = idNumber.replace("-", "")
+        val studentID = InputValidation.normalizeStudentId(idNumber)
         val yearLevelText = binding.etYearLevel.text.toString().trim()
         val password = binding.etPassword.text.toString()
         val confirmPassword = binding.etConfirmPassword.text.toString()
 
-        if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() ||
-            idNumber.isEmpty() || yearLevelText.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()
+        if (firstName.isEmpty() || lastName.isEmpty() || emailInput.isEmpty() ||
+            idNumber.isEmpty() || yearLevelText.isEmpty() || password.isEmpty() ||
+            confirmPassword.isEmpty()
         ) {
             Toast.makeText(requireContext(), "All fields are required!", Toast.LENGTH_SHORT).show()
+            return null
+        }
+
+        if (!InputValidation.isValidName(firstName) || !InputValidation.isValidName(lastName)) {
+            Toast.makeText(requireContext(), "Names must be 1-80 characters and contain no control characters", Toast.LENGTH_SHORT).show()
+            return null
+        }
+        if (!InputValidation.isValidEmail(email)) {
+            binding.etEmail.error = "Enter a valid email address"
             return null
         }
 
@@ -102,12 +134,12 @@ class RegisterFragment : Fragment() {
             binding.tilYearLevel.error = "Please select a year level"
             return null
         }
-        if (studentID.length !in 9..12 || !studentID.all { it.isDigit() }) {
+        if (studentID == null) {
             binding.tilIDNumber.error = "Invalid ID format (9-12 digits required)"
             return null
         }
-        if (password.length < 10) {
-            binding.tilPassword.error = "Minimum 10 characters"
+        if (!InputValidation.isValidPassword(password)) {
+            binding.tilPassword.error = "Use 10-128 characters"
             return null
         }
         if (password != confirmPassword) {
@@ -121,8 +153,37 @@ class RegisterFragment : Fragment() {
             "email" to email,
             "student_id" to studentID,
             "year_level" to yearLevelInt.toString(),
-            "password" to password
+            "password" to password,
+            "terms_accepted" to "true"
         )
+    }
+
+    private fun showTermsOfService() {
+        val termsText = TextView(requireContext()).apply {
+            setPadding(48, 24, 48, 24)
+            text = getString(R.string.terms_of_service_body)
+            textSize = 14f
+            setTextColor(resources.getColor(R.color.vetsched_text_primary, null))
+        }
+        val scrollView = ScrollView(requireContext()).apply {
+            addView(
+                termsText,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.terms_of_service_title)
+            .setView(scrollView)
+            .setPositiveButton(R.string.close, null)
+            .show()
+    }
+
+    private fun styleClickableText(textView: TextView) {
+        textView.paintFlags = textView.paintFlags or Paint.UNDERLINE_TEXT_FLAG
+        textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
 
     private fun requestRegistrationOtp(params: Map<String, String>) {
@@ -172,9 +233,15 @@ class RegisterFragment : Fragment() {
     }
 
     private fun verifyRegistrationOtp() {
-        val email = binding.etEmail.text.toString().trim()
+        if (!requireTermsAcceptance()) return
+
+        val email = InputValidation.normalizeEmail(binding.etEmail.text.toString())
         val code = binding.etRegistrationOtp.text?.toString()?.trim().orEmpty()
-        if (code.length != 6 || !code.all(Char::isDigit)) {
+        if (!InputValidation.isValidEmail(email)) {
+            binding.etEmail.error = "Enter a valid email address"
+            return
+        }
+        if (!InputValidation.isValidOtp(code)) {
             binding.tilRegistrationOtp.error = "Enter the 6-digit code"
             return
         }
@@ -182,7 +249,9 @@ class RegisterFragment : Fragment() {
         binding.tilRegistrationOtp.error = null
         binding.btnVerifyRegistrationOtp.isEnabled = false
         binding.btnResendRegistrationOtp.isEnabled = false
-        RetrofitClient.instance.verifyRegistrationOtp(mapOf("email" to email, "code" to code))
+        RetrofitClient.instance.verifyRegistrationOtp(
+            mapOf("email" to email, "code" to code, "terms_accepted" to "true")
+        )
             .enqueue(object : Callback<AuthResponse> {
                 override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
                     if (!isAdded || _binding == null) return
@@ -215,6 +284,14 @@ class RegisterFragment : Fragment() {
         } catch (_: com.google.gson.JsonSyntaxException) {
             null
         }
+    }
+
+    private fun requireTermsAcceptance(): Boolean {
+        if (binding.cbAcceptTerms.isChecked) return true
+        binding.tvTermsError.visibility = View.VISIBLE
+        binding.cbAcceptTerms.requestFocus()
+        Toast.makeText(requireContext(), R.string.terms_required, Toast.LENGTH_SHORT).show()
+        return false
     }
 
     private fun setRequestLoading(loading: Boolean) {

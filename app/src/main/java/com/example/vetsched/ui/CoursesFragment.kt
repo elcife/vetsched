@@ -5,10 +5,11 @@ import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
@@ -23,6 +24,8 @@ import com.example.vetsched.data.EnrolledCourse
 import com.example.vetsched.databinding.FragmentCoursesBinding
 import com.example.vetsched.databinding.ItemCourseBinding
 import com.example.vetsched.databinding.ItemCourseSectionBinding
+import com.example.vetsched.notifications.NotificationCenter
+import com.example.vetsched.notifications.NotificationInbox
 import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
@@ -35,6 +38,7 @@ class CoursesFragment : Fragment() {
 
     private var currentQuery = ""
     private var expandedPosition = -1
+    private var selectedYearLevel = 1
     
     private var allSubjects = listOf<Subject>()
     private val displayedSubjects = mutableListOf<Subject>()
@@ -56,6 +60,7 @@ class CoursesFragment : Fragment() {
         adapter = CoursesAdapter()
         binding.rvCourses.adapter = adapter
 
+        setupYearLevelSelector()
         fetchSubjects()
         setupSearch()
         setupSwipeRefresh()
@@ -67,6 +72,42 @@ class CoursesFragment : Fragment() {
         binding.btnProfile.setOnClickListener {
             findNavController().navigate(R.id.action_coursesFragment_to_profileFragment)
         }
+
+        binding.ivNotification.setOnClickListener {
+            NotificationCenter.loadUpdates(
+                requireContext(),
+                selectedYearLevel,
+                markAsRead = true
+            ) { updates, error ->
+                if (!isAdded || _binding == null) return@loadUpdates
+                if (error != null) {
+                    Toast.makeText(requireContext(), error, Toast.LENGTH_LONG).show()
+                } else {
+                    checkAndMergeData()
+                    binding.viewNotificationIndicator.visibility = View.GONE
+                    NotificationInbox.show(requireContext(), updates.orEmpty())
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (_binding != null) refreshNotificationIndicator()
+    }
+
+    private fun refreshNotificationIndicator() {
+        val checkedYearLevel = selectedYearLevel
+        binding.viewNotificationIndicator.visibility =
+            if (NotificationCenter.hasUnread(requireContext(), checkedYearLevel)) View.VISIBLE else View.GONE
+        NotificationCenter.loadUpdates(requireContext(), checkedYearLevel) { _, error ->
+            if (!isAdded || _binding == null) return@loadUpdates
+            if (error == null) {
+                if (selectedYearLevel == checkedYearLevel) checkAndMergeData()
+                binding.viewNotificationIndicator.visibility =
+                    if (NotificationCenter.hasUnread(requireContext(), selectedYearLevel)) View.VISIBLE else View.GONE
+            }
+        }
     }
 
     private fun setupSwipeRefresh() {
@@ -75,6 +116,44 @@ class CoursesFragment : Fragment() {
         }
         // Optional: Customize colors
         binding.swipeRefresh.setColorSchemeResources(R.color.vetsched_primary)
+    }
+
+    private fun setupYearLevelSelector() {
+        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val savedSelection = sharedPref.getInt(
+            "coursesYearLevel",
+            sharedPref.getInt("userYearLevel", 1)
+        )
+        selectedYearLevel = savedSelection.coerceIn(1, 4)
+
+        ArrayAdapter.createFromResource(
+            requireContext(),
+            R.array.year_levels,
+            android.R.layout.simple_spinner_item
+        ).also { spinnerAdapter ->
+            spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            binding.spinnerYearLevel.adapter = spinnerAdapter
+        }
+        binding.spinnerYearLevel.setSelection(selectedYearLevel - 1, false)
+        binding.spinnerYearLevel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                selectedYearLevel = position + 1
+                sharedPref.edit().putInt("coursesYearLevel", selectedYearLevel).apply()
+                expandedPosition = -1
+                if (fetchedSubjects != null && fetchedSections != null) {
+                    NotificationCenter.initializeBaselineIfMissing(
+                        requireContext(),
+                        selectedYearLevel,
+                        fetchedSubjects.orEmpty(),
+                        fetchedSections.orEmpty()
+                    )
+                }
+                refreshNotificationIndicator()
+                updateList()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
     }
 
     private var fetchedSubjects: List<Subject>? = null
@@ -136,7 +215,13 @@ class CoursesFragment : Fragment() {
             binding.swipeRefresh.isRefreshing = false
             
             // Group sections by subjectId
-            val sectionsMap = allSections.groupBy { it.subjectId }
+            val hiddenSectionIds = NotificationCenter.getHiddenSectionIds(
+                requireContext(),
+                selectedYearLevel
+            )
+            val sectionsMap = allSections
+                .filterNot { it.id in hiddenSectionIds }
+                .groupBy { it.subjectId }
             
             // Assign sections to subjects
             subjects.forEach { subject ->
@@ -144,6 +229,12 @@ class CoursesFragment : Fragment() {
             }
             
             allSubjects = subjects
+            NotificationCenter.initializeBaselineIfMissing(
+                requireContext(),
+                selectedYearLevel,
+                subjects,
+                allSections
+            )
             updateList()
             
             // Handle scrolling to target course if specified
@@ -173,20 +264,9 @@ class CoursesFragment : Fragment() {
     private fun updateList() {
         displayedSubjects.clear()
         
-        val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
-        val userYearLevel = sharedPref.getInt("userYearLevel", 0)
-
-        if (userYearLevel == 0) {
-            binding.tvFoundCount.text = "Please set your year level in Profile"
-            binding.tvEmptyState.text = "Year level not set"
-            binding.tvEmptyState.visibility = View.VISIBLE
-            binding.rvCourses.visibility = View.GONE
-            return
-        }
-
         val query = currentQuery.trim().lowercase()
         val filtered = allSubjects.filter { subject ->
-            val matchesYear = subject.yearLevel == userYearLevel
+            val matchesYear = subject.yearLevel == selectedYearLevel
             val matchesQuery = if (query.isEmpty()) {
                 true
             } else {
@@ -196,7 +276,17 @@ class CoursesFragment : Fragment() {
         }
         
         displayedSubjects.addAll(filtered)
-        binding.tvFoundCount.text = "${filtered.size} Found (Year $userYearLevel)"
+        binding.tvFoundCount.text = resources.getQuantityString(
+            R.plurals.course_count,
+            filtered.size,
+            filtered.size,
+            selectedYearLevel
+        )
+        binding.tvEmptyState.text = if (query.isEmpty()) {
+            "No courses available for Year $selectedYearLevel"
+        } else {
+            "No courses match your search"
+        }
         
         if (displayedSubjects.isEmpty()) {
             binding.tvEmptyState.visibility = View.VISIBLE
@@ -231,9 +321,17 @@ class CoursesFragment : Fragment() {
             holder.itemBinding.tvCourseNameMasked.text = subject.name
             
             val sectionCount = subject.sections.size
-            holder.itemBinding.tvSectionCount.text = if (sectionCount == 1) "1 section" else "$sectionCount sections"
+            holder.itemBinding.tvSectionCount.text = if (sectionCount == 0) {
+                getString(R.string.no_sections_short)
+            } else {
+                resources.getQuantityString(R.plurals.section_count, sectionCount, sectionCount)
+            }
             
             holder.itemBinding.layoutSections.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            holder.itemBinding.tvNoSections.visibility =
+                if (isExpanded && sectionCount == 0) View.VISIBLE else View.GONE
+            holder.itemBinding.containerSections.visibility =
+                if (sectionCount == 0) View.GONE else View.VISIBLE
             
             holder.itemBinding.containerSections.removeAllViews()
             if (isExpanded) {

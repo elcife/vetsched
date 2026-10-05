@@ -2,6 +2,7 @@
 header("Content-Type: application/json");
 require_once "db.php";
 require_once __DIR__ . "/emailjs_mailer.php";
+require_once __DIR__ . "/input_validation.php";
 
 function respond($status, $success, $message) {
     http_response_code($status);
@@ -9,9 +10,9 @@ function respond($status, $success, $message) {
     exit;
 }
 
-$data = json_decode(file_get_contents("php://input"), true);
-$email = isset($data["email"]) ? strtolower(trim($data["email"])) : "";
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+$data = vetschedReadJsonRequest();
+$email = $data === null ? null : vetschedNormalizeEmail($data["email"] ?? null);
+if ($email === null) {
     respond(400, false, "Enter a valid email address");
 }
 

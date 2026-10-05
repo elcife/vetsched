@@ -1,6 +1,7 @@
 <?php
 header("Content-Type: application/json");
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/input_validation.php";
 
 function verifyRegistrationRespond($status, $success, $message) {
     http_response_code($status);
@@ -8,11 +9,14 @@ function verifyRegistrationRespond($status, $success, $message) {
     exit;
 }
 
-$data = json_decode(file_get_contents("php://input"), true);
-$email = is_array($data) ? strtolower(trim((string) ($data["email"] ?? ""))) : "";
-$code = is_array($data) ? trim((string) ($data["code"] ?? "")) : "";
-if (!filter_var($email, FILTER_VALIDATE_EMAIL) || !preg_match('/^\d{6}$/', $code)) {
+$data = vetschedReadJsonRequest();
+$email = $data === null ? null : vetschedNormalizeEmail($data["email"] ?? null);
+$code = $data["code"] ?? null;
+if ($email === null || !vetschedIsValidOtp($code)) {
     verifyRegistrationRespond(400, false, "Enter the email address and 6-digit code");
+}
+if (!vetschedHasAcceptedTerms($data["terms_accepted"] ?? null)) {
+    verifyRegistrationRespond(400, false, "Accept the Terms of Service before continuing");
 }
 
 try {

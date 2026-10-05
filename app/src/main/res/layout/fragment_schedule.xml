@@ -34,6 +34,19 @@
         app:layout_constraintTop_toTopOf="@id/tvUserName"
         app:tint="@color/vetsched_text_primary" />
 
+    <View
+        android:id="@+id/viewNotificationIndicator"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:layout_marginTop="1dp"
+        android:layout_marginEnd="1dp"
+        android:background="@drawable/bg_notification_dot"
+        android:contentDescription="Unread notifications"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/ivNotification"
+        app:layout_constraintTop_toTopOf="@id/ivNotification"
+        tools:visibility="visible" />
+
 
     <HorizontalScrollView
         android:id="@+id/dateSelector"
