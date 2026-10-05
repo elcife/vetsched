@@ -3,6 +3,7 @@ package com.example.vetsched.api
 import com.example.vetsched.api.models.AuthResponse
 import com.example.vetsched.api.models.EnrollmentRequest
 import com.example.vetsched.api.models.Section
+import com.example.vetsched.api.models.ScheduleSubmissionRequest
 import com.example.vetsched.api.models.Subject
 import retrofit2.Call
 import retrofit2.http.Body
@@ -52,4 +53,7 @@ interface ApiService {
 
     @POST("plotting.php?resource=unenroll")
     fun unenroll(@Body request: EnrollmentRequest): Call<AuthResponse>
+
+    @POST("plotting.php?resource=submit_schedule")
+    fun submitSchedule(@Body request: ScheduleSubmissionRequest): Call<AuthResponse>
 }

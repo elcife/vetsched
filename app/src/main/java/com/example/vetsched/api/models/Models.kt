@@ -57,3 +57,7 @@ data class EnrollmentRequest(
     @SerializedName("studentId") val studentId: String,
     @SerializedName("offeringIds") val offeringIds: List<Int>
 )
+
+data class ScheduleSubmissionRequest(
+    @SerializedName("studentId") val studentId: String
+)

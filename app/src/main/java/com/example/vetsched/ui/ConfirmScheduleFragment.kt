@@ -77,8 +77,17 @@ class ConfirmScheduleFragment : Fragment() {
             binding.btnYesSubmit.text = "Submit Schedule to Admin"
 
             binding.btnYesSubmit.setOnClickListener {
-                Toast.makeText(context, "Schedule successfully submitted to Admin!", Toast.LENGTH_SHORT).show()
-                findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
+                binding.btnYesSubmit.isEnabled = false
+                CourseRepository.submitSchedule(requireContext()) { success ->
+                    if (!isAdded) return@submitSchedule
+                    binding.btnYesSubmit.isEnabled = true
+                    if (success) {
+                        Toast.makeText(requireContext(), "Schedule successfully submitted to Admin!", Toast.LENGTH_SHORT).show()
+                        findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
+                    } else {
+                        Toast.makeText(requireContext(), "Could not submit schedule. Try again.", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }

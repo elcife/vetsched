@@ -127,6 +127,30 @@ object CourseRepository {
             })
     }
 
+    fun submitSchedule(context: Context, callback: (Boolean) -> Unit) {
+        val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null)
+            ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
+        val request = com.example.vetsched.api.models.ScheduleSubmissionRequest(studentId)
+
+        com.example.vetsched.api.RetrofitClient.instance.submitSchedule(request)
+            .enqueue(object : retrofit2.Callback<com.example.vetsched.api.models.AuthResponse> {
+                override fun onResponse(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    response: retrofit2.Response<com.example.vetsched.api.models.AuthResponse>
+                ) {
+                    callback(response.isSuccessful && response.body()?.success == true)
+                }
+
+                override fun onFailure(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    t: Throwable
+                ) {
+                    callback(false)
+                }
+            })
+    }
+
     fun clear(context: Context) {
         enrolledCourses.clear()
         saveToPrefs(context)
