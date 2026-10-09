@@ -66,16 +66,7 @@ class RegisterFragment : Fragment() {
 
         binding.btnCreateAccount.setOnClickListener {
             val params = validatedRegistrationParams() ?: return@setOnClickListener
-            requestRegistrationOtp(params)
-        }
-
-        binding.btnResendRegistrationOtp.setOnClickListener {
-            val params = validatedRegistrationParams() ?: return@setOnClickListener
-            requestRegistrationOtp(params)
-        }
-
-        binding.btnVerifyRegistrationOtp.setOnClickListener {
-            verifyRegistrationOtp()
+            registerDirectly(params)
         }
 
         binding.btnEditRegistration.setOnClickListener {
@@ -118,7 +109,7 @@ class RegisterFragment : Fragment() {
             return null
         }
         if (!InputValidation.isValidEmail(email)) {
-            binding.etEmail.error = "Enter a valid email address"
+            binding.etEmail.error = "Only @phinmaed.com email addresses are allowed"
             return null
         }
 
@@ -187,95 +178,33 @@ class RegisterFragment : Fragment() {
         textView.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
 
-    private fun requestRegistrationOtp(params: Map<String, String>) {
+    private fun registerDirectly(params: Map<String, String>) {
         setRequestLoading(true)
-        RetrofitClient.instance.requestRegistrationOtp(params).enqueue(object : Callback<AuthResponse> {
-                override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
-                    if (!isAdded || _binding == null) return
-                    setRequestLoading(false)
-                    val result = response.body()
-                    if (response.isSuccessful && result?.success == true) {
-                        binding.registrationOtpPanel.visibility = View.VISIBLE
-                        binding.btnCreateAccount.visibility = View.GONE
-                        setRegistrationFieldsEnabled(false)
-                        binding.tvRegistrationOtpMessage.text =
-                            getString(R.string.registration_otp_sent_to, params.getValue("email"))
-                        startResendCooldown(result.resendAfterSeconds ?: 60)
-                        Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
-                    } else {
-                        val errorBody = response.errorBody()?.string()
-                        val authResponse = try {
-                            if (errorBody != null) {
-                                Gson().fromJson(errorBody, AuthResponse::class.java)
-                            } else {
-                                response.body()
-                            }
-                        } catch (_: com.google.gson.JsonSyntaxException) {
-                            null
-                        }
-
-                        val errorMsg = authResponse?.message ?: "Could not send verification code"
-
-                        when (authResponse?.errorField) {
-                            "student_id" -> _binding?.tilIDNumber?.error = errorMsg
-                            "email" -> _binding?.tilEmail?.error = errorMsg
-                            "year_level" -> _binding?.tilYearLevel?.error = errorMsg
-                            else -> Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-                        }
+        RetrofitClient.instance.register(params).enqueue(object : Callback<AuthResponse> {
+            override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
+                if (!isAdded || _binding == null) return
+                setRequestLoading(false)
+                val result = response.body() ?: parseError(response)
+                if (response.isSuccessful && result?.success == true) {
+                    Toast.makeText(context, "Account created successfully! You can now log in.", Toast.LENGTH_LONG).show()
+                    findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
+                } else {
+                    val errorMsg = result?.message ?: "Registration failed"
+                    when (result?.errorField) {
+                        "student_id" -> _binding?.tilIDNumber?.error = errorMsg
+                        "email" -> _binding?.tilEmail?.error = errorMsg
+                        "year_level" -> _binding?.tilYearLevel?.error = errorMsg
+                        else -> Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                     }
                 }
+            }
 
-                override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                    if (!isAdded || _binding == null) return
-                    setRequestLoading(false)
-                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
-                }
-            })
-    }
-
-    private fun verifyRegistrationOtp() {
-        if (!requireTermsAcceptance()) return
-
-        val email = InputValidation.normalizeEmail(binding.etEmail.text.toString())
-        val code = binding.etRegistrationOtp.text?.toString()?.trim().orEmpty()
-        if (!InputValidation.isValidEmail(email)) {
-            binding.etEmail.error = "Enter a valid email address"
-            return
-        }
-        if (!InputValidation.isValidOtp(code)) {
-            binding.tilRegistrationOtp.error = "Enter the 6-digit code"
-            return
-        }
-
-        binding.tilRegistrationOtp.error = null
-        binding.btnVerifyRegistrationOtp.isEnabled = false
-        binding.btnResendRegistrationOtp.isEnabled = false
-        RetrofitClient.instance.verifyRegistrationOtp(
-            mapOf("email" to email, "code" to code, "terms_accepted" to "true")
-        )
-            .enqueue(object : Callback<AuthResponse> {
-                override fun onResponse(call: Call<AuthResponse>, response: Response<AuthResponse>) {
-                    if (!isAdded || _binding == null) return
-                    binding.btnVerifyRegistrationOtp.isEnabled = true
-                    renderResendCooldown()
-                    val result = response.body() ?: parseError(response)
-                    if (response.isSuccessful && result?.success == true) {
-                        resendTimer?.cancel()
-                        Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                        findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
-                    } else {
-                        binding.tilRegistrationOtp.error =
-                            result?.message ?: "Could not verify the code"
-                    }
-                }
-
-                override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
-                    if (!isAdded || _binding == null) return
-                    binding.btnVerifyRegistrationOtp.isEnabled = true
-                    renderResendCooldown()
-                    Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
-                }
-            })
+            override fun onFailure(call: Call<AuthResponse>, t: Throwable) {
+                if (!isAdded || _binding == null) return
+                setRequestLoading(false)
+                Toast.makeText(context, "Network error: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
     }
 
     private fun parseError(response: Response<AuthResponse>): AuthResponse? {

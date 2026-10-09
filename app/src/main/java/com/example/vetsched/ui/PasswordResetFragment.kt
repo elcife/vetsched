@@ -125,7 +125,7 @@ class PasswordResetFragment : Fragment() {
 
         when {
             !InputValidation.isValidEmail(email) -> {
-                binding.etResetEmail.error = "Enter a valid email address"
+                binding.etResetEmail.error = "Only @phinmaed.com email addresses are allowed"
                 return
             }
             resetForEmail == null || !email.equals(resetForEmail, ignoreCase = true) -> {

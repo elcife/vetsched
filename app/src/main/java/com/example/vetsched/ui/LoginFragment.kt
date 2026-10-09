@@ -59,7 +59,7 @@ class LoginFragment : Fragment() {
             val password = binding.etPassword.text.toString()
 
             if (!InputValidation.isValidEmail(email)) {
-                binding.etEmail.error = "Enter a valid email address"
+                binding.etEmail.error = "Only @phinmaed.com email addresses are allowed"
                 return@setOnClickListener
             }
             if (!InputValidation.isPasswordWithinLimit(password)) {

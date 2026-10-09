@@ -18,12 +18,6 @@ interface ApiService {
     @POST("add_account.php")
     fun register(@Body params: Map<String, String>): Call<AuthResponse>
 
-    @POST("request_registration_otp.php")
-    fun requestRegistrationOtp(@Body params: Map<String, String>): Call<AuthResponse>
-
-    @POST("verify_registration_otp.php")
-    fun verifyRegistrationOtp(@Body params: Map<String, String>): Call<AuthResponse>
-
     @POST("change_password.php")
     fun changePassword(@Body params: Map<String, String>): Call<AuthResponse>
 

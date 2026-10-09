@@ -8,7 +8,9 @@ object InputValidation {
 
     fun isValidEmail(value: String): Boolean {
         val email = normalizeEmail(value)
-        return email.length <= 254 && Patterns.EMAIL_ADDRESS.matcher(email).matches()
+        return email.length <= 254 &&
+               Patterns.EMAIL_ADDRESS.matcher(email).matches() &&
+               email.endsWith("@phinmaed.com")
     }
 
     fun normalizeName(value: String): String =
