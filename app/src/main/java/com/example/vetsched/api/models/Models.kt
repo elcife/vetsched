@@ -61,3 +61,8 @@ data class EnrollmentRequest(
 data class ScheduleSubmissionRequest(
     @SerializedName("studentId") val studentId: String
 )
+
+data class SubmissionStatusResponse(
+    @SerializedName("isSubmitted") val isSubmitted: Boolean,
+    @SerializedName("submittedAt") val submittedAt: String? = null
+)

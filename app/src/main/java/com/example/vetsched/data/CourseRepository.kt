@@ -1,6 +1,7 @@
 package com.example.vetsched.data
 
 import android.content.Context
+import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.example.vetsched.util.InputValidation
@@ -20,36 +21,95 @@ data class EnrolledCourse(
 object CourseRepository {
     private val enrolledCourses = mutableListOf<EnrolledCourse>()
     private var isLoaded = false
+    var isSubmitted = false
+
+    fun checkSubmissionStatus(context: Context, callback: (Boolean) -> Unit) {
+        val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null)
+            ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
+
+        val wasSubmitted = isSubmitted
+
+        com.example.vetsched.api.RetrofitClient.instance.getSubmissionStatus(studentId)
+            .enqueue(object : retrofit2.Callback<com.example.vetsched.api.models.SubmissionStatusResponse> {
+                override fun onResponse(
+                    call: retrofit2.Call<com.example.vetsched.api.models.SubmissionStatusResponse>,
+                    response: retrofit2.Response<com.example.vetsched.api.models.SubmissionStatusResponse>
+                ) {
+                    val newIsSubmitted = response.body()?.isSubmitted == true
+
+                    if (wasSubmitted && !newIsSubmitted) {
+                        val yearLevel = sharedPref.getInt("userYearLevel", 1).coerceIn(1, 5)
+                        com.example.vetsched.notifications.NotificationCenter.pushCustomNotification(
+                            context,
+                            yearLevel,
+                            "Schedule Returned",
+                            "The admin has returned your schedule. You can now revise and update your schedule."
+                        )
+
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            try {
+                                val activity = context as? android.app.Activity 
+                                    ?: (context as? android.content.ContextWrapper)?.baseContext as? android.app.Activity
+                                if (activity != null && !activity.isFinishing) {
+                                    androidx.appcompat.app.AlertDialog.Builder(activity)
+                                        .setTitle("Schedule Returned by Admin")
+                                        .setMessage("Your schedule has been returned by the admin. You can now revise and update your schedule.")
+                                        .setPositiveButton("OK", null)
+                                        .show()
+                                }
+                            } catch (e: Exception) {
+                                // Ignore if context is not an activity
+                            }
+                        }
+                    }
+
+                    isSubmitted = newIsSubmitted
+                    callback(isSubmitted)
+                }
+
+                override fun onFailure(call: retrofit2.Call<com.example.vetsched.api.models.SubmissionStatusResponse>, t: Throwable) {
+                    callback(isSubmitted)
+                }
+            })
+    }
 
     fun fetchEnrolled(context: Context, callback: (Boolean) -> Unit) {
         val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val studentId = sharedPref.getString("studentId", null)
             ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
 
-        com.example.vetsched.api.RetrofitClient.instance.getEnrolledCourses(studentId)
-            .enqueue(object : retrofit2.Callback<List<EnrolledCourse>> {
-                override fun onResponse(
-                    call: retrofit2.Call<List<EnrolledCourse>>,
-                    response: retrofit2.Response<List<EnrolledCourse>>
-                ) {
-                    if (response.isSuccessful) {
-                        enrolledCourses.clear()
-                        enrolledCourses.addAll(response.body() ?: emptyList())
-                        isLoaded = true
-                        saveToPrefs(context)
-                        callback(true)
-                    } else {
+        checkSubmissionStatus(context) { _ ->
+            com.example.vetsched.api.RetrofitClient.instance.getEnrolledCourses(studentId)
+                .enqueue(object : retrofit2.Callback<List<EnrolledCourse>> {
+                    override fun onResponse(
+                        call: retrofit2.Call<List<EnrolledCourse>>,
+                        response: retrofit2.Response<List<EnrolledCourse>>
+                    ) {
+                        if (response.isSuccessful) {
+                            enrolledCourses.clear()
+                            enrolledCourses.addAll(response.body() ?: emptyList())
+                            isLoaded = true
+                            saveToPrefs(context)
+                            callback(true)
+                        } else {
+                            callback(false)
+                        }
+                    }
+
+                    override fun onFailure(call: retrofit2.Call<List<EnrolledCourse>>, t: Throwable) {
                         callback(false)
                     }
-                }
-
-                override fun onFailure(call: retrofit2.Call<List<EnrolledCourse>>, t: Throwable) {
-                    callback(false)
-                }
-            })
+                })
+        }
     }
 
     fun enroll(course: EnrolledCourse, context: Context, callback: (Boolean) -> Unit) {
+        if (isSubmitted) {
+            Toast.makeText(context, "Schedule is submitted to admin and locked", Toast.LENGTH_SHORT).show()
+            return callback(false)
+        }
+
         val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val studentId = sharedPref.getString("studentId", null)
             ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
@@ -87,6 +147,11 @@ object CourseRepository {
     }
 
     fun remove(course: EnrolledCourse, context: Context, callback: (Boolean) -> Unit) {
+        if (isSubmitted) {
+            Toast.makeText(context, "Schedule is submitted to admin and locked", Toast.LENGTH_SHORT).show()
+            return callback(false)
+        }
+
         val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val studentId = sharedPref.getString("studentId", null)
             ?.let(InputValidation::normalizeStudentId) ?: return callback(false)
@@ -139,7 +204,12 @@ object CourseRepository {
                     call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
                     response: retrofit2.Response<com.example.vetsched.api.models.AuthResponse>
                 ) {
-                    callback(response.isSuccessful && response.body()?.success == true)
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        isSubmitted = true
+                        callback(true)
+                    } else {
+                        callback(false)
+                    }
                 }
 
                 override fun onFailure(
@@ -151,9 +221,43 @@ object CourseRepository {
             })
     }
 
-    fun clear(context: Context) {
-        enrolledCourses.clear()
-        saveToPrefs(context)
+    fun clear(context: Context, callback: ((Boolean) -> Unit)? = null) {
+        if (isSubmitted) {
+            Toast.makeText(context, "Schedule is submitted to admin and locked", Toast.LENGTH_SHORT).show()
+            callback?.invoke(false)
+            return
+        }
+
+        val sharedPref = context.getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
+        val studentId = sharedPref.getString("studentId", null)
+            ?.let(InputValidation::normalizeStudentId)
+
+        if (studentId == null) {
+            enrolledCourses.clear()
+            saveToPrefs(context)
+            callback?.invoke(true)
+            return
+        }
+
+        val request = com.example.vetsched.api.models.ScheduleSubmissionRequest(studentId)
+        com.example.vetsched.api.RetrofitClient.instance.clearSchedule(request)
+            .enqueue(object : retrofit2.Callback<com.example.vetsched.api.models.AuthResponse> {
+                override fun onResponse(
+                    call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>,
+                    response: retrofit2.Response<com.example.vetsched.api.models.AuthResponse>
+                ) {
+                    enrolledCourses.clear()
+                    isSubmitted = false
+                    saveToPrefs(context)
+                    callback?.invoke(response.isSuccessful)
+                }
+
+                override fun onFailure(call: retrofit2.Call<com.example.vetsched.api.models.AuthResponse>, t: Throwable) {
+                    enrolledCourses.clear()
+                    saveToPrefs(context)
+                    callback?.invoke(false)
+                }
+            })
     }
 
     fun isEnrolled(courseCode: String, sectionName: String, context: Context): Boolean {

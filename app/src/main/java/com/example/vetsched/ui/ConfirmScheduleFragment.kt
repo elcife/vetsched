@@ -55,37 +55,61 @@ class ConfirmScheduleFragment : Fragment() {
             findNavController().navigateUp()
         }
 
-        if (previewCourses.isNotEmpty()) {
-            // Mode A: Section Enrollment preview (from CoursesFragment)
-            binding.btnExportPdf.visibility = View.GONE
-            binding.btnYesSubmit.isEnabled = true
-            binding.btnYesSubmit.setBackgroundColor(Color.parseColor("#77C647"))
-            binding.btnYesSubmit.text = "Confirm Enrollment"
+        binding.btnYesSubmit.isEnabled = false
+        binding.btnYesSubmit.text = "Checking status..."
 
-            binding.btnYesSubmit.setOnClickListener {
-                enrollAllPreviews(0)
-            }
-        } else {
-            // Mode B: Schedule Submission & Review (from ScheduleFragment)
-            binding.btnExportPdf.visibility = View.VISIBLE
-            binding.btnExportPdf.setOnClickListener {
-                com.example.vetsched.util.SchedulePdfExporter.exportToPdf(requireContext())
-            }
+        CourseRepository.checkSubmissionStatus(requireContext()) { isSubmitted ->
+            if (!isAdded || _binding == null) return@checkSubmissionStatus
 
-            binding.btnYesSubmit.isEnabled = true
-            binding.btnYesSubmit.setBackgroundColor(Color.parseColor("#5C6D4F"))
-            binding.btnYesSubmit.text = "Submit Schedule to Admin"
+            if (previewCourses.isNotEmpty()) {
+                // Mode A: Section Enrollment preview (from CoursesFragment)
+                binding.btnExportPdf.visibility = View.GONE
+                binding.btnYesSubmit.isEnabled = !isSubmitted
+                binding.btnYesSubmit.setBackgroundColor(if (isSubmitted) Color.parseColor("#B0B0B0") else Color.parseColor("#77C647"))
+                binding.btnYesSubmit.text = if (isSubmitted) "Submitted to Admin (Locked)" else "Confirm Enrollment"
 
-            binding.btnYesSubmit.setOnClickListener {
-                binding.btnYesSubmit.isEnabled = false
-                CourseRepository.submitSchedule(requireContext()) { success ->
-                    if (!isAdded) return@submitSchedule
-                    binding.btnYesSubmit.isEnabled = true
-                    if (success) {
-                        Toast.makeText(requireContext(), "Schedule successfully submitted to Admin!", Toast.LENGTH_SHORT).show()
-                        findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
-                    } else {
-                        Toast.makeText(requireContext(), "Could not submit schedule. Try again.", Toast.LENGTH_SHORT).show()
+                if (!isSubmitted) {
+                    binding.btnYesSubmit.setOnClickListener {
+                        enrollAllPreviews(0)
+                    }
+                } else {
+                    binding.btnYesSubmit.setOnClickListener {
+                        Toast.makeText(context, "Schedule is already submitted and locked by admin.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                // Mode B: Schedule Submission & Review (from ScheduleFragment)
+                binding.btnExportPdf.visibility = View.GONE
+
+                binding.btnYesSubmit.isEnabled = true
+                binding.btnYesSubmit.setBackgroundColor(Color.parseColor("#5C6D4F"))
+
+                if (isSubmitted) {
+                    binding.btnYesSubmit.text = "Export Schedule to PDF"
+                    binding.btnYesSubmit.setOnClickListener {
+                        com.example.vetsched.util.SchedulePdfExporter.exportToPdf(requireContext())
+                    }
+                } else {
+                    binding.btnYesSubmit.text = "Submit Schedule to Admin"
+                    binding.btnYesSubmit.setOnClickListener {
+                        androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                            .setTitle("Submit Schedule")
+                            .setMessage("Are you sure you wanna submit to admin? Once submitted you can no longer change your schedule.")
+                            .setPositiveButton("Yes, Submit") { _, _ ->
+                                binding.btnYesSubmit.isEnabled = false
+                                CourseRepository.submitSchedule(requireContext()) { success ->
+                                    if (!isAdded) return@submitSchedule
+                                    binding.btnYesSubmit.isEnabled = true
+                                    if (success) {
+                                        Toast.makeText(requireContext(), "Schedule successfully submitted to Admin!", Toast.LENGTH_SHORT).show()
+                                        findNavController().navigate(R.id.action_confirmScheduleFragment_to_scheduleFragment)
+                                    } else {
+                                        Toast.makeText(requireContext(), "Could not submit schedule. Try again.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
                     }
                 }
             }
@@ -180,6 +204,26 @@ class ConfirmScheduleFragment : Fragment() {
         }
     }
 
+    private fun showScheduleDetailsDialog(course: EnrolledCourse) {
+        val dialogBinding = com.example.vetsched.databinding.DialogScheduleDetailsBinding.inflate(layoutInflater)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(dialogBinding.root)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        dialogBinding.tvDetailTime.text = ScheduleTimeRange.format(course.timeRange)
+        dialogBinding.tvDetailSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
+        dialogBinding.tvDetailCourseName.text = if (course.courseName.isNotBlank()) "${course.courseCode} - ${course.courseName}" else course.courseCode
+        dialogBinding.tvDetailRoomInstructor.text = "${course.room}  •  ${course.instructor}"
+
+        dialogBinding.btnViewInCourses.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
@@ -223,34 +267,71 @@ class ConfirmScheduleFragment : Fragment() {
                 
                 itemBinding.cardsContainer.visibility = if (enrolled.isNotEmpty()) View.VISIBLE else View.GONE
 
-                enrolled.forEach { course ->
+                val nonConflicting = enrolled.filter { findConflictingCourse(it, enrolled) == null }
+                val conflicting = enrolled.filter { findConflictingCourse(it, enrolled) != null }
+
+                (nonConflicting + conflicting).forEach { course ->
                     if (course.courseCode.isNotBlank()) {
                         val isPreview = previewCourses.contains(course)
-                        addCard(itemBinding, course, isPreview)
+                        val conflict = findConflictingCourse(course, enrolled)
+                        addCard(itemBinding, course, isPreview, conflict)
                     }
                 }
 
                 setupTimeline(itemBinding)
             }
 
-            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse, isPreview: Boolean = false) {
+            private fun findConflictingCourse(course: EnrolledCourse, dayList: List<EnrolledCourse>): EnrolledCourse? {
+                val currentRange = ScheduleTimeRange.parse(course.timeRange) ?: return null
+                for (other in dayList) {
+                    if (other.courseCode != course.courseCode || other.section != course.section) {
+                        val otherRange = ScheduleTimeRange.parse(other.timeRange) ?: continue
+                        if (currentRange.startMinutes < otherRange.endMinutes && otherRange.startMinutes < currentRange.endMinutes) {
+                            return other
+                        }
+                    }
+                }
+                return null
+            }
+
+            private fun addCard(
+                itemBinding: ItemDayScheduleBinding,
+                course: EnrolledCourse,
+                isPreview: Boolean = false,
+                conflictingCourse: EnrolledCourse? = null
+            ) {
                 val cardBinding = ItemScheduleCardBinding.inflate(
                     LayoutInflater.from(itemBinding.root.context),
                     itemBinding.cardsContainer,
                     false
                 )
 
+                val baseTitle = if (!course.type.isNullOrBlank()) "${course.courseName} (${course.type})" else course.courseName
+                val courseTitle = if (baseTitle.isNotBlank()) baseTitle else course.courseCode
+                cardBinding.tvCourseName.text = if (isPreview) "[PREVIEW] $courseTitle" else courseTitle
                 cardBinding.tvTimeRange.text = ScheduleTimeRange.format(course.timeRange)
-                cardBinding.tvSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
-                cardBinding.tvCourseName.text = if (isPreview) "[PREVIEW] ${course.courseName}" else course.courseName
+                cardBinding.tvSection.text = course.section
                 cardBinding.tvLocation.text = course.room
                 cardBinding.tvInstructor.text = course.instructor
+
+                if (conflictingCourse != null) {
+                    cardBinding.viewConflictOverlay.visibility = View.VISIBLE
+                    cardBinding.tvConflictLabel.visibility = View.VISIBLE
+                    cardBinding.tvConflictLabel.text = "CONFLICT WITH ${conflictingCourse.courseName}"
+                } else {
+                    cardBinding.viewConflictOverlay.visibility = View.GONE
+                    cardBinding.tvConflictLabel.visibility = View.GONE
+                }
                 
                 if (isPreview) {
                     cardBinding.root.setBackgroundResource(R.drawable.bg_schedule_card)
                 }
 
                 cardBinding.btnRemove.visibility = View.GONE
+
+                cardBinding.root.setOnClickListener {
+                    showScheduleDetailsDialog(course)
+                }
 
                 val timeInfo = ScheduleTimeRange.parse(course.timeRange) ?: return
                 val density = itemBinding.root.resources.displayMetrics.density

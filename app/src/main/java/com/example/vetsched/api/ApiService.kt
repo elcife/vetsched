@@ -50,4 +50,10 @@ interface ApiService {
 
     @POST("plotting.php?resource=submit_schedule")
     fun submitSchedule(@Body request: ScheduleSubmissionRequest): Call<AuthResponse>
+
+    @POST("plotting.php?resource=clear_schedule")
+    fun clearSchedule(@Body request: ScheduleSubmissionRequest): Call<AuthResponse>
+
+    @GET("plotting.php?resource=submission_status")
+    fun getSubmissionStatus(@Query("studentId") studentId: String): Call<com.example.vetsched.api.models.SubmissionStatusResponse>
 }

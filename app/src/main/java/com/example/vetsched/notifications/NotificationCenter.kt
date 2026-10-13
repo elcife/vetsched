@@ -17,6 +17,7 @@ import com.example.vetsched.data.CourseRepository
 import com.example.vetsched.data.EnrolledCourse
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
+import com.google.gson.reflect.TypeToken
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -100,6 +101,33 @@ object NotificationCenter {
             .orEmpty()
             .mapNotNull(String::toIntOrNull)
             .toSet()
+
+    fun pushCustomNotification(context: Context, yearLevel: Int, title: String, message: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val historyKey = "notification_history_year_$yearLevel"
+        val unreadKey = unreadKey(yearLevel)
+
+        val json = prefs.getString(historyKey, null)
+        val type = object : TypeToken<List<CourseUpdateNotification>>() {}.type
+        val list = try {
+            gson.fromJson<List<CourseUpdateNotification>>(json, type) ?: mutableListOf()
+        } catch (e: Exception) {
+            mutableListOf()
+        }
+
+        val mutableList = list.toMutableList()
+        val notif = CourseUpdateNotification(title, message, System.currentTimeMillis(), listOf("returned", "admin"))
+        mutableList.add(0, notif)
+
+        if (mutableList.size > MAX_NOTIFICATIONS) {
+            mutableList.removeAt(mutableList.size - 1)
+        }
+
+        prefs.edit()
+            .putString(historyKey, gson.toJson(mutableList))
+            .putBoolean(unreadKey, true)
+            .apply()
+    }
 
     fun initializeBaselineIfMissing(
         context: Context,

@@ -249,24 +249,67 @@ object SchedulePdfExporter {
                     }
 
                     val boxHeight = blockBottom - blockTop
+
+                    // Adjust font size and line spacing based on box height
+                    val fontSize = when {
+                        boxHeight < 20f -> 6f
+                        boxHeight < 35f -> 6.5f
+                        boxHeight < 50f -> 7.5f
+                        else -> 8.5f
+                    }
+                    val lineSpacing = fontSize + 1.5f
+
                     textPaint.apply {
                         color = textColor
-                        textSize = if (boxHeight < 35f) 7f else 8f
+                        textSize = fontSize
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                     }
 
-                    val totalTextHeight = lines.size * (textPaint.textSize + 2f)
-                    var textY = blockTop + (boxHeight - totalTextHeight) / 2f + textPaint.textSize
+                    // Calculate max lines that fit safely in boxHeight
+                    val maxLinesFit = (boxHeight / lineSpacing).toInt().coerceAtLeast(1)
 
-                    lines.forEach { line ->
-                        if (textY < blockBottom - 2f) {
-                            val maxChars = (dayColWidth / (textPaint.textSize * 0.55f)).toInt().coerceAtLeast(5)
-                            val displayLine = if (line.length > maxChars) line.take(maxChars - 2) + ".." else line
-                            canvas.drawText(displayLine, leftX + dayColWidth / 2f, textY, textPaint)
-                            textY += textPaint.textSize + 2f
-                        }
+                    val selectedLines = mutableListOf<String>()
+                    selectedLines.add(course.courseCode)
+
+                    if (maxLinesFit >= 2 && !course.type.isNullOrBlank()) {
+                        selectedLines.add(course.type)
                     }
+                    if (maxLinesFit >= 3 && !course.instructor.isNullOrBlank()) {
+                        selectedLines.add(course.instructor)
+                    }
+                    if (maxLinesFit >= 4 && !course.room.isNullOrBlank()) {
+                        selectedLines.add(course.room)
+                    }
+
+                    // For short 30-min slots, combine code and type (e.g. "VET031 (Lec)")
+                    if (maxLinesFit == 1 && !course.type.isNullOrBlank()) {
+                        selectedLines[0] = "${course.courseCode} (${course.type.take(3)})"
+                    }
+
+                    val actualLines = selectedLines.take(maxLinesFit)
+                    val totalContentHeight = actualLines.size * lineSpacing
+                    var textY = blockTop + (boxHeight - totalContentHeight) / 2f + fontSize - 1f
+
+                    canvas.save()
+                    canvas.clipRect(leftX + 1.5f, blockTop + 1f, rightX - 1.5f, blockBottom - 1f)
+
+                    val maxLineWidth = dayColWidth - 4f
+
+                    actualLines.forEach { line ->
+                        var displayLine = line
+                        while (textPaint.measureText(displayLine) > maxLineWidth && displayLine.length > 3) {
+                            displayLine = displayLine.dropLast(1)
+                        }
+                        if (displayLine.length < line.length && !displayLine.endsWith("...")) {
+                            displayLine = if (displayLine.length > 3) displayLine.dropLast(3) + "..." else displayLine
+                        }
+
+                        canvas.drawText(displayLine, leftX + dayColWidth / 2f, textY, textPaint)
+                        textY += lineSpacing
+                    }
+
+                    canvas.restore()
                 }
             }
         }

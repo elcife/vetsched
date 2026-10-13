@@ -155,15 +155,33 @@ class ProfileFragment : Fragment() {
     }
 
     private fun showResetScheduleWarning() {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Reset Schedule")
-            .setMessage("Are you sure you want to clear your entire schedule? This cannot be undone.")
-            .setPositiveButton("Clear All") { _, _ ->
-                CourseRepository.clear(requireContext())
-                Toast.makeText(requireContext(), "Schedule cleared", Toast.LENGTH_SHORT).show()
+        CourseRepository.checkSubmissionStatus(requireContext()) { isSubmitted ->
+            if (!isAdded) return@checkSubmissionStatus
+            if (isSubmitted) {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Schedule Locked")
+                    .setMessage("Your schedule has been submitted to the admin and cannot be cleared unless returned by the admin.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else {
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Reset Schedule")
+                    .setMessage("Are you sure you want to clear your entire schedule? This cannot be undone.")
+                    .setPositiveButton("Clear All") { _, _ ->
+                        CourseRepository.clear(requireContext()) { success ->
+                            if (isAdded) {
+                                if (success) {
+                                    Toast.makeText(requireContext(), "Schedule cleared successfully", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(requireContext(), "Failed to clear schedule", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
     }
 
     private fun showChangePasswordDialog() {

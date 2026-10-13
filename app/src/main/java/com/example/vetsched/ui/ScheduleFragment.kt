@@ -57,7 +57,10 @@ class ScheduleFragment : Fragment() {
         sharedPref.getInt("userYearLevel", 0)
             .takeIf { it in 1..4 }
             ?.let { NotificationCenter.initializeBaselineFromServer(requireContext(), it) }
-        // removed redundant loadEnrolledData() as onResume will handle it
+
+        CourseRepository.checkSubmissionStatus(requireContext()) { isSubmitted ->
+            updateSubmitButtonState(isSubmitted)
+        }
 
         binding.btnProfile.setOnClickListener {
             findNavController().navigate(R.id.action_scheduleFragment_to_profileFragment)
@@ -67,28 +70,7 @@ class ScheduleFragment : Fragment() {
             findNavController().navigate(R.id.action_scheduleFragment_to_coursesFragment)
         }
 
-        binding.btnSubmit.setOnClickListener {
-            val enrolledList = CourseRepository.getAllEnrolled(requireContext())
-            if (enrolledList.isEmpty()) {
-                androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                    .setTitle("No Subjects Added")
-                    .setMessage("You must add at least one subject to your schedule before submitting.")
-                    .setPositiveButton("OK", null)
-                    .show()
-                return@setOnClickListener
-            }
-
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Submit Schedule")
-                .setMessage("Are you sure you want to submit your schedule?")
-                .setPositiveButton("Yes, Review Schedule") { _, _ ->
-                    if (findNavController().currentDestination?.id == R.id.scheduleFragment) {
-                        findNavController().navigate(R.id.action_scheduleFragment_to_confirmScheduleFragment)
-                    }
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
+        updateSubmitButtonState(CourseRepository.isSubmitted)
 
         binding.ivNotification.setOnClickListener {
             val yearLevel = sharedPref.getInt("userYearLevel", 1).coerceIn(1, 5)
@@ -132,11 +114,50 @@ class ScheduleFragment : Fragment() {
         }
     }
 
+    private fun updateSubmitButtonState(isSubmitted: Boolean) {
+        if (!isAdded || _binding == null) return
+        if (isSubmitted) {
+            binding.btnSubmit.text = "Export Schedule to PDF"
+            binding.btnSubmit.isEnabled = true
+            binding.btnSubmit.backgroundTintList = ContextCompat.getColorStateList(requireContext(), R.color.vetsched_primary)
+            binding.btnSubmit.setOnClickListener {
+                com.example.vetsched.util.SchedulePdfExporter.exportToPdf(requireContext())
+            }
+        } else {
+            binding.btnSubmit.text = "Submit"
+            binding.btnSubmit.isEnabled = true
+            binding.btnSubmit.backgroundTintList = ContextCompat.getColorStateList(requireContext(), R.color.vetsched_primary)
+            binding.btnSubmit.setOnClickListener {
+                val enrolledList = CourseRepository.getAllEnrolled(requireContext())
+                if (enrolledList.isEmpty()) {
+                    androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle("No Subjects Added")
+                        .setMessage("You must add at least one subject to your schedule before submitting.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnClickListener
+                }
+
+                androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Submit Schedule")
+                    .setMessage("Are you sure you want to submit your schedule?")
+                    .setPositiveButton("Yes, Review Schedule") { _, _ ->
+                        if (findNavController().currentDestination?.id == R.id.scheduleFragment) {
+                            findNavController().navigate(R.id.action_scheduleFragment_to_confirmScheduleFragment)
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+    }
+
     private fun loadEnrolledData() {
         CourseRepository.fetchEnrolled(requireContext()) {
             if (isAdded && _binding != null) {
                 setupViewPager()
                 updateDayIndicators()
+                updateSubmitButtonState(CourseRepository.isSubmitted)
             }
         }
     }
@@ -226,6 +247,32 @@ class ScheduleFragment : Fragment() {
         })
     }
 
+    private fun showScheduleDetailsDialog(course: EnrolledCourse) {
+        val dialogBinding = com.example.vetsched.databinding.DialogScheduleDetailsBinding.inflate(layoutInflater)
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+            .setView(dialogBinding.root)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        dialogBinding.tvDetailTime.text = ScheduleTimeRange.format(course.timeRange)
+        dialogBinding.tvDetailSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
+        dialogBinding.tvDetailCourseName.text = if (course.courseName.isNotBlank()) "${course.courseCode} - ${course.courseName}" else course.courseCode
+        dialogBinding.tvDetailRoomInstructor.text = "${course.room}  •  ${course.instructor}"
+
+        dialogBinding.btnViewInCourses.setOnClickListener {
+            dialog.dismiss()
+            if (findNavController().currentDestination?.id == R.id.scheduleFragment) {
+                val bundle = Bundle().apply {
+                    putString("targetCourseCode", course.courseCode)
+                }
+                findNavController().navigate(R.id.action_scheduleFragment_to_coursesFragment, bundle)
+            }
+        }
+
+        dialog.show()
+    }
+
     private fun setupViewPager() {
         val adapter = DailyScheduleAdapter(days)
         binding.viewPager.adapter = adapter
@@ -307,43 +354,92 @@ class ScheduleFragment : Fragment() {
                 
                 itemBinding.cardsContainer.visibility = if (enrolled.isNotEmpty()) View.VISIBLE else View.GONE
 
-                enrolled.forEach { course ->
+                // Add non-conflicting courses first, then conflicting courses so conflicting ones render at bottom
+                val nonConflicting = enrolled.filter { findConflictingCourse(it, enrolled) == null }
+                val conflicting = enrolled.filter { findConflictingCourse(it, enrolled) != null }
+
+                (nonConflicting + conflicting).forEach { course ->
                     if (course.courseCode.isNotBlank()) {
-                        addCard(itemBinding, course)
+                        val conflict = findConflictingCourse(course, enrolled)
+                        addCard(itemBinding, course, conflict)
                     }
                 }
 
                 setupTimeline(itemBinding)
             }
 
-            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse) {
+            private fun findConflictingCourse(course: EnrolledCourse, dayList: List<EnrolledCourse>): EnrolledCourse? {
+                val currentRange = ScheduleTimeRange.parse(course.timeRange) ?: return null
+                for (other in dayList) {
+                    if (other.courseCode != course.courseCode || other.section != course.section) {
+                        val otherRange = ScheduleTimeRange.parse(other.timeRange) ?: continue
+                        if (currentRange.startMinutes < otherRange.endMinutes && otherRange.startMinutes < currentRange.endMinutes) {
+                            return other
+                        }
+                    }
+                }
+                return null
+            }
+
+            private fun addCard(itemBinding: ItemDayScheduleBinding, course: EnrolledCourse, conflictingCourse: EnrolledCourse? = null) {
                 val cardBinding = ItemScheduleCardBinding.inflate(
                     LayoutInflater.from(itemBinding.root.context),
                     itemBinding.cardsContainer,
                     false
                 )
                 
+                val courseTitle = if (!course.type.isNullOrBlank()) "${course.courseName} (${course.type})" else course.courseName
+                cardBinding.tvCourseName.text = if (courseTitle.isNotBlank()) courseTitle else course.courseCode
                 cardBinding.tvTimeRange.text = ScheduleTimeRange.format(course.timeRange)
-                cardBinding.tvSection.text = if (course.type != null) "${course.section} (${course.type})" else course.section
-                cardBinding.tvCourseName.text = course.courseName
+                cardBinding.tvSection.text = course.section
                 cardBinding.tvLocation.text = course.room
                 cardBinding.tvInstructor.text = course.instructor
+
+                if (conflictingCourse != null) {
+                    cardBinding.viewConflictOverlay.visibility = View.VISIBLE
+                    cardBinding.tvConflictLabel.visibility = View.VISIBLE
+                    cardBinding.tvConflictLabel.text = "CONFLICT WITH ${conflictingCourse.courseName}"
+                } else {
+                    cardBinding.viewConflictOverlay.visibility = View.GONE
+                    cardBinding.tvConflictLabel.visibility = View.GONE
+                }
                 
                 cardBinding.btnRemove.setOnClickListener {
-                    CourseRepository.remove(course, it.context) { success ->
-                        if (success) {
-                            loadEnrolledData() // Re-fetch from server to be sure
-                        } else {
-                            Toast.makeText(it.context, "Failed to unenroll", Toast.LENGTH_SHORT).show()
+                    val context = it.context
+                    androidx.appcompat.app.AlertDialog.Builder(context)
+                        .setTitle("Remove Class")
+                        .setMessage("Are you sure you want to remove this class? Removing it will also remove all other class components in the ${course.section} section bundle.")
+                        .setPositiveButton("Yes, Remove All") { _, _ ->
+                            val allEnrolled = CourseRepository.getAllEnrolled(context)
+                            val sectionBundleCourses = allEnrolled.filter { enrolled ->
+                                enrolled.courseCode == course.courseCode && enrolled.section == course.section
+                            }
+
+                            val combinedOfferingIds = sectionBundleCourses
+                                .flatMap { enrolled -> enrolled.offeringIds.orEmpty() }
+                                .distinct()
+
+                            val bundleToRemove = if (combinedOfferingIds.isNotEmpty()) {
+                                course.copy(offeringIds = combinedOfferingIds)
+                            } else {
+                                course
+                            }
+
+                            CourseRepository.remove(bundleToRemove, context) { success ->
+                                if (success) {
+                                    Toast.makeText(context, "Removed ${course.courseCode} (${course.section}) section bundle", Toast.LENGTH_SHORT).show()
+                                    loadEnrolledData()
+                                } else {
+                                    Toast.makeText(context, "Failed to unenroll", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
-                    }
+                        .setNegativeButton("Cancel", null)
+                        .show()
                 }
 
                 cardBinding.root.setOnClickListener {
-                    val bundle = Bundle().apply {
-                        putString("targetCourseCode", course.courseCode)
-                    }
-                    findNavController().navigate(R.id.action_scheduleFragment_to_coursesFragment, bundle)
+                    showScheduleDetailsDialog(course)
                 }
 
                 val timeInfo = ScheduleTimeRange.parse(course.timeRange) ?: return

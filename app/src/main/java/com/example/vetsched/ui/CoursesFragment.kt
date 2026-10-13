@@ -1,6 +1,7 @@
 package com.example.vetsched.ui
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -30,6 +31,8 @@ import com.google.gson.Gson
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+
+private data class CourseTimeRange(val start: Int, val end: Int)
 
 class CoursesFragment : Fragment() {
 
@@ -387,29 +390,43 @@ class CoursesFragment : Fragment() {
                     }
 
                     val isEnrolled = CourseRepository.isEnrolled(subject.code, sectionBinding.tvSectionName.text.toString(), requireContext())
-                    val isConflicting = !isEnrolled && CourseRepository.isConflicting(combinedDaysStr, firstTimeRange, requireContext())
+                    val conflictingEnrolled = if (!isEnrolled) findConflictingEnrolledCourse(combinedDaysStr, firstTimeRange, requireContext()) else null
                     val isFull = (section.remainingSeats ?: 1) <= 0
 
                     if (isEnrolled) {
+                        sectionBinding.btnEnroll.visibility = View.VISIBLE
+                        sectionBinding.tvConflictPill.visibility = View.GONE
                         sectionBinding.btnEnroll.text = "Enrolled"
                         sectionBinding.btnEnroll.isEnabled = false
                         sectionBinding.btnEnroll.setBackgroundColor(Color.LTGRAY)
+                        sectionBinding.cardSectionContainer.setBackgroundResource(R.drawable.bg_profile_card)
                     } else if (!section.isOpen) {
+                        sectionBinding.btnEnroll.visibility = View.VISIBLE
+                        sectionBinding.tvConflictPill.visibility = View.GONE
                         sectionBinding.btnEnroll.text = "Closed"
                         sectionBinding.btnEnroll.isEnabled = false
                         sectionBinding.btnEnroll.setBackgroundColor(Color.LTGRAY)
+                        sectionBinding.cardSectionContainer.setBackgroundResource(R.drawable.bg_profile_card)
                     } else if (isFull) {
+                        sectionBinding.btnEnroll.visibility = View.VISIBLE
+                        sectionBinding.tvConflictPill.visibility = View.GONE
                         sectionBinding.btnEnroll.text = "Full"
                         sectionBinding.btnEnroll.isEnabled = false
                         sectionBinding.btnEnroll.setBackgroundColor(Color.parseColor("#BDBDBD"))
-                    } else if (isConflicting) {
-                        sectionBinding.btnEnroll.text = "Conflict"
-                        sectionBinding.btnEnroll.isEnabled = false
-                        sectionBinding.btnEnroll.setBackgroundColor(Color.parseColor("#BDBDBD"))
+                        sectionBinding.cardSectionContainer.setBackgroundResource(R.drawable.bg_profile_card)
+                    } else if (conflictingEnrolled != null) {
+                        sectionBinding.btnEnroll.visibility = View.GONE
+                        sectionBinding.tvConflictPill.visibility = View.VISIBLE
+                        sectionBinding.tvConflictPill.text = "Conflict with \"${conflictingEnrolled.courseName},${conflictingEnrolled.section}\""
+                        sectionBinding.tvConflictPill.backgroundTintList = ColorStateList.valueOf(Color.parseColor("#B3261E"))
+                        sectionBinding.cardSectionContainer.setBackgroundColor(Color.parseColor("#C2C9BF"))
                     } else {
+                        sectionBinding.btnEnroll.visibility = View.VISIBLE
+                        sectionBinding.tvConflictPill.visibility = View.GONE
                         sectionBinding.btnEnroll.text = "Enroll"
                         sectionBinding.btnEnroll.isEnabled = true
                         sectionBinding.btnEnroll.setBackgroundColor(Color.parseColor("#5C6D4F"))
+                        sectionBinding.cardSectionContainer.setBackgroundResource(R.drawable.bg_profile_card)
                     }
 
                     sectionBinding.btnEnroll.setOnClickListener {
@@ -491,6 +508,57 @@ class CoursesFragment : Fragment() {
             val days = section.days
             if (days.isNullOrEmpty()) return "Mon"
             return days.joinToString(", ")
+        }
+
+        private fun findConflictingEnrolledCourse(dayStr: String, timeRange: String, context: Context): com.example.vetsched.data.EnrolledCourse? {
+            if (dayStr.isBlank() || dayStr == "No days assigned") return null
+            val enrolledList = CourseRepository.getAllEnrolled(context)
+            val newDays = parseDays(dayStr)
+            val newTime = parseRange(timeRange) ?: return null
+
+            for (enrolled in enrolledList) {
+                val enrolledDays = parseDays(enrolled.day)
+                if (newDays.any { day -> enrolledDays.any { it.equals(day, ignoreCase = true) } }) {
+                    val enrolledTime = parseRange(enrolled.timeRange) ?: continue
+                    if (overlaps(newTime, enrolledTime)) {
+                        return enrolled
+                    }
+                }
+            }
+            return null
+        }
+
+        private fun parseDays(dayStr: String): List<String> {
+            return dayStr.replace("{", "").replace("}", "").replace("[", "").replace("]", "").replace("\"", "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        }
+
+        private fun parseRange(range: String): CourseTimeRange? {
+            return try {
+                val parts = range.split("-", "•")
+                val cleanParts = parts.map { it.trim() }.filter { it.isNotEmpty() }
+                val start = timeToMinutes(cleanParts[0])
+                val end = if (cleanParts.size > 1) timeToMinutes(cleanParts[1]) else start + 60
+                CourseTimeRange(start, end)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        private fun timeToMinutes(time: String): Int {
+            val clean = time.uppercase()
+            val isPM = clean.contains("PM")
+            val isAM = clean.contains("AM")
+            val digits = clean.replace("AM", "").replace("PM", "").trim()
+            val parts = digits.split(":")
+            var h = parts[0].toInt()
+            val m = if (parts.size > 1) parts[1].toInt() else 0
+            if (isPM && h < 12) h += 12
+            if (isAM && h == 12) h = 0
+            return h * 60 + m
+        }
+
+        private fun overlaps(r1: CourseTimeRange, r2: CourseTimeRange): Boolean {
+            return r1.start < r2.end && r2.start < r1.end
         }
 
         private fun formatTime(rawTime: String): String {
