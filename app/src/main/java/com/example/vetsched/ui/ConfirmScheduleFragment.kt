@@ -250,6 +250,8 @@ class ConfirmScheduleFragment : Fragment() {
 
             fun bind(dayTitle: String) {
                 itemBinding.tvDayTitle.text = dayTitle
+                itemBinding.tvDailyMotivation.text =
+                    DailyMotivation.forDay(itemBinding.root.context, dayTitle)
                 itemBinding.cardsContainer.removeAllViews()
 
                 val enrolled = CourseRepository.getCoursesForDay(dayTitle, itemBinding.root.context).toMutableList()

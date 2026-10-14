@@ -36,6 +36,7 @@ class ProfileFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        BottomNavigationInsets.apply(binding.bottomNav)
 
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val userName = sharedPref.getString("userName", "User").orEmpty()

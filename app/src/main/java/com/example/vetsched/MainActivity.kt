@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
                 systemBars.left,
                 systemBars.top,
                 systemBars.right,
-                if (ime.bottom > 0) ime.bottom else systemBars.bottom
+                ime.bottom
             )
             insets
         }

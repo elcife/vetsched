@@ -1,4 +1,14 @@
 <resources>
+    <string-array name="daily_motivational_messages">
+        <item>A fresh week, a fresh chance to grow.</item>
+        <item>Small steps still move you forward.</item>
+        <item>You’re halfway there—keep going.</item>
+        <item>Stay focused; your effort is adding up.</item>
+        <item>Finish strong. You’ve earned your progress.</item>
+        <item>Make room for rest and new ideas.</item>
+        <item>Reset, recharge, and believe in what’s next.</item>
+    </string-array>
+    <string name="daily_motivation_default">One step at a time. You’ve got this!</string>
     <string name="app_name">VETSCHED</string>
     <string name="welcome_back">Welcome Back</string>
     <string name="back">Back</string>

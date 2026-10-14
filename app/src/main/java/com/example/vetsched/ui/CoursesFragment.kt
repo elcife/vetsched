@@ -58,6 +58,7 @@ class CoursesFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        BottomNavigationInsets.apply(binding.bottomNav)
 
         binding.rvCourses.layoutManager = LinearLayoutManager(requireContext())
         adapter = CoursesAdapter()

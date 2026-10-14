@@ -8,6 +8,7 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="vetsched_primary">#5C6D4F</color>
+    <color name="vetsched_launcher_background">#90AB85</color>
     <color name="vetsched_background">#F8FAF7</color>
     <color name="vetsched_field_bg">#F0F2ED</color>
     <color name="vetsched_text_primary">#1A1A1A</color>

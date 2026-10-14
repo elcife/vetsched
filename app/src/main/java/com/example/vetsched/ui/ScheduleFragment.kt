@@ -40,6 +40,7 @@ class ScheduleFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        BottomNavigationInsets.apply(binding.bottomNav)
 
         val sharedPref = requireActivity().getSharedPreferences("VETSCHED_PREFS", Context.MODE_PRIVATE)
         val studentId = sharedPref.getString("studentId", null)
@@ -352,6 +353,8 @@ class ScheduleFragment : Fragment() {
             
             fun bind(dayTitle: String) {
                 itemBinding.tvDayTitle.text = dayTitle
+                itemBinding.tvDailyMotivation.text =
+                    DailyMotivation.forDay(itemBinding.root.context, dayTitle)
                 itemBinding.cardsContainer.removeAllViews()
                 
                 val enrolled = CourseRepository.getCoursesForDay(dayTitle, itemBinding.root.context)
