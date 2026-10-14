@@ -88,6 +88,11 @@ class ScheduleFragment : Fragment() {
                 }
             }
         }
+
+        binding.swipeRefresh.setOnRefreshListener {
+            loadEnrolledData()
+            binding.swipeRefresh.isRefreshing = false
+        }
     }
 
     override fun onResume() {

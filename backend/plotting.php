@@ -146,7 +146,7 @@ try {
                   AND offering_id IN (
                       SELECT o2.offering_id
                       FROM offering o1
-                      JOIN offering o2 ON o2.section_id = o1.section_id AND o2.subject_id = o1.subject_id
+                      JOIN offering o2 ON o2.section_id = o1.section_id
                       WHERE o1.offering_id IN ($placeholders)
                   )
             ");
@@ -187,7 +187,6 @@ try {
     }
 
     if ($resource === 'clear_schedule') {
-        $studentId = trim((string) ($data['studentId'] ?? ''));
         $studentId = trim((string) ($data['studentId'] ?? ''));
         if ($studentId === '') {
             respond(['success' => false, 'message' => 'Student ID is required'], 400);

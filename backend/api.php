@@ -1,0 +1,690 @@
+<?php
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    exit;
+}
+
+require_once __DIR__ . '/db.php';
+
+function parsePgArray($pgArray) {
+    if (!$pgArray || $pgArray === '{}') return [];
+    // Remove braces and split by comma
+    $clean = trim($pgArray, '{}');
+    if ($clean === '') return [];
+    // Handle quoted strings in array if any, though likely simple days
+    return str_getcsv($clean, ',', '"');
+}
+
+function respond($data, $status = 200) {
+    http_response_code($status);
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function groupSectionSlots(array $allSlots): array {
+    $classes = [];
+    $allOfferingIds = [];
+    foreach ($allSlots as $slot) {
+        $allOfferingIds[] = (int) $slot['offering_id'];
+        $key = ($slot['classType'] ?: 'Lecture') . '|' . $slot['start'] . '|' . $slot['end'] . '|' . $slot['instructor'] . '|' . $slot['room'];
+        if (!isset($classes[$key])) {
+            $classes[$key] = [
+                'classType' => $slot['classType'] ?: 'Lecture',
+                'start' => $slot['start'],
+                'end' => $slot['end'],
+                'days' => [$slot['day']],
+                'instructor' => $slot['instructor'],
+                'room' => $slot['room'],
+                'offeringIds' => [(int) $slot['offering_id']]
+            ];
+        } else {
+            if (!in_array($slot['day'], $classes[$key]['days'])) {
+                $classes[$key]['days'][] = $slot['day'];
+            }
+            if (!in_array((int) $slot['offering_id'], $classes[$key]['offeringIds'])) {
+                $classes[$key]['offeringIds'][] = (int) $slot['offering_id'];
+            }
+        }
+    }
+
+    return [array_values($classes), array_values(array_unique($allOfferingIds))];
+}
+
+function requestData() {
+    $body = json_decode(file_get_contents('php://input'), true);
+    return is_array($body) ? $body : [];
+}
+
+function requireSuperAdmin(PDO $conn, array $data): array {
+    $username = trim((string) ($data['actorUsername'] ?? ''));
+    $password = (string) ($data['actorPassword'] ?? '');
+    if ($username === '' || $password === '') {
+        respond(['success' => false, 'message' => 'Super-admin credentials are required'], 401);
+    }
+
+    $stmt = $conn->prepare("SELECT admin_id, username, password_hash, role, is_active FROM admin_account WHERE LOWER(username) = LOWER(:username) LIMIT 1");
+    $stmt->execute([':username' => $username]);
+    $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (
+        !$admin ||
+        !filter_var($admin['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN) ||
+        $admin['role'] !== 'super_admin' ||
+        !password_verify($password, $admin['password_hash'])
+    ) {
+        respond(['success' => false, 'message' => 'Super-admin authorization failed'], 403);
+    }
+    return $admin;
+}
+
+function getOrCreateInstructorId(PDO $conn, string $name): int {
+    $cleanName = trim($name);
+    if ($cleanName === '') {
+        throw new InvalidArgumentException('Instructor name cannot be empty');
+    }
+
+    $stmt = $conn->prepare('SELECT instructor_id FROM instructor WHERE LOWER(TRIM(instructor_name)) = LOWER(TRIM(:name)) LIMIT 1');
+    $stmt->execute([':name' => $cleanName]);
+    $id = $stmt->fetchColumn();
+    if ($id !== false && $id !== null) {
+        return (int) $id;
+    }
+
+    $insert = $conn->prepare('INSERT INTO instructor (instructor_name) VALUES (:name) RETURNING instructor_id');
+    $insert->execute([':name' => $cleanName]);
+    return (int) $insert->fetchColumn();
+}
+
+$resource = $_GET['resource'] ?? '';
+
+try {
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        if ($resource === 'subjects') {
+            $rows = $conn->query('SELECT subject_id AS id, TRIM(subject_code) AS code, subject_name AS name, year_level AS "yearLevel", semester FROM subject ORDER BY year_level, semester, subject_id')->fetchAll(PDO::FETCH_ASSOC);
+            respond($rows);
+        }
+
+        if ($resource === 'sections') {
+            $sql = "SELECT s.section_id AS id, s.section_name AS type,
+                           s.is_open AS \"isOpen\",
+                           s.subject_id AS \"subjectId\",
+                           s.max_capacity AS \"maxCapacity\",
+                           COUNT(DISTINCT ss.student_id) AS \"enrollmentCount\"
+                    FROM section s
+                    LEFT JOIN (
+                        SELECT section_id, offering_id FROM offering WHERE section_id IS NOT NULL
+                        UNION
+                        SELECT sc.section_id, o.offering_id
+                        FROM offering o
+                        INNER JOIN schedule sc ON sc.schedule_id = o.schedule_id
+                    ) so ON so.section_id = s.section_id
+                    LEFT JOIN plotting p ON p.offering_id = so.offering_id
+                    LEFT JOIN schedule_submission ss ON TRIM(ss.student_id) = TRIM(p.student_id) AND ss.is_submitted = TRUE
+                    GROUP BY s.section_id, s.section_name, s.is_open, s.subject_id, s.max_capacity
+                    ORDER BY s.section_id";
+            $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            $classSql = "SELECT sc.section_id,
+                               o.class_type AS \"classType\", sc.day_of_the_week AS day,
+                               sc.start_time AS start, sc.end_time AS \"end\",
+                               i.instructor_name AS instructor,
+                               CONCAT_WS(', ', NULLIF(TRIM(r.building), ''), NULLIF(TRIM(r.room_num), '')) AS room,
+                               o.offering_id
+                        FROM schedule sc
+                        JOIN offering o ON o.schedule_id = sc.schedule_id
+                            AND (o.section_id = sc.section_id OR o.section_id IS NULL)
+                        LEFT JOIN instructor i ON i.instructor_id = o.instructor_id
+                        LEFT JOIN room r ON r.room_id = o.room_id
+                        WHERE sc.section_id IS NOT NULL";
+            $slotsBySection = [];
+            foreach ($conn->query($classSql)->fetchAll(PDO::FETCH_ASSOC) as $slot) {
+                $slotsBySection[(int) $slot['section_id']][] = $slot;
+            }
+
+            foreach ($rows as &$row) {
+                [$classes, $allOfferingIds] = groupSectionSlots($slotsBySection[(int) $row['id']] ?? []);
+                $row['classes'] = $classes;
+                $row['offeringIds'] = $allOfferingIds;
+                $row['id'] = (int)$row['id'];
+                $row['subjectId'] = $row['subjectId'] !== null ? (int)$row['subjectId'] : null;
+                $row['maxCapacity'] = (int)$row['maxCapacity'];
+                $row['enrollmentCount'] = (int)$row['enrollmentCount'];
+                $row['remainingSeats'] = max($row['maxCapacity'] - $row['enrollmentCount'], 0);
+                $row['isOpen'] = (bool)$row['isOpen'];
+            }
+            unset($row);
+            respond($rows);
+        }
+
+        if ($resource === 'students') {
+            $sql = "SELECT student_id AS id, student_id AS \"studentId\",
+                           CONCAT_WS(' ', first_name, last_name) AS name,
+                           year_level AS \"yearLevel\",
+                           semester
+                    FROM account ORDER BY student_id";
+            respond($conn->query($sql)->fetchAll(PDO::FETCH_ASSOC));
+        }
+
+        if ($resource === 'instructors') {
+            $rows = $conn->query('SELECT instructor_id AS id, instructor_name AS name FROM instructor ORDER BY instructor_name')->fetchAll(PDO::FETCH_ASSOC);
+            respond($rows);
+        }
+
+        if ($resource === 'enrolled_courses') {
+            $studentId = $_GET['studentId'] ?? '';
+            if (!$studentId) {
+                respond(['success' => false, 'message' => 'Student ID required'], 400);
+            }
+
+            $sql = "SELECT DISTINCT sub.subject_code AS \"courseCode\", sub.subject_name AS \"courseName\",
+                           COALESCE(s_schedule.section_name, s_offering.section_name) AS section,
+                           sc.day_of_the_week AS day,
+                           CONCAT(sc.start_time, ' - ', sc.end_time) AS \"timeRange\",
+                           CONCAT_WS(', ', NULLIF(TRIM(r.building), ''), NULLIF(TRIM(r.room_num), '')) AS room,
+                           i.instructor_name AS instructor,
+                           o.class_type AS type,
+                           o.offering_id
+                    FROM plotting p
+                    JOIN schedule_submission ss ON TRIM(ss.student_id) = TRIM(p.student_id) AND ss.is_submitted = TRUE
+                    JOIN offering o ON o.offering_id = p.offering_id
+                    JOIN subject sub ON sub.subject_id = o.subject_id
+                    LEFT JOIN schedule sc ON sc.schedule_id = o.schedule_id
+                    LEFT JOIN section s_schedule ON s_schedule.section_id = sc.section_id
+                    LEFT JOIN section s_offering ON s_offering.section_id = o.section_id
+                    LEFT JOIN instructor i ON i.instructor_id = o.instructor_id
+                    LEFT JOIN room r ON r.room_id = o.room_id
+                    WHERE TRIM(p.student_id) = TRIM(:studentId)
+                    ORDER BY 5";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([':studentId' => $studentId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as &$row) {
+                $row['section'] = $row['section'] ?: 'Unassigned';
+                $row['day'] = $row['day'] ?: 'TBA';
+                $row['timeRange'] = $row['timeRange'] ?: 'TBA';
+                $row['room'] = $row['room'] ?: 'TBA';
+                $row['instructor'] = $row['instructor'] ?: 'TBA';
+                $row['type'] = $row['type'] ?: 'Lecture';
+                $row['offeringIds'] = [(int) $row['offering_id']];
+            }
+            respond($rows);
+        }
+
+        respond(['success' => false, 'message' => 'Unknown resource'], 404);
+    }
+
+    $data = requestData();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        respond(['success' => false, 'message' => 'POST required'], 405);
+    }
+
+    if ($resource === 'schedule_submission' && ($data['action'] ?? '') === 'return') {
+        $studentId = trim((string) ($data['studentId'] ?? ''));
+        if ($studentId === '') {
+            respond(['success' => false, 'message' => 'Student ID is required'], 400);
+        }
+
+        $conn->beginTransaction();
+        $submissionStmt = $conn->prepare('UPDATE schedule_submission SET is_submitted = FALSE, submitted_at = NULL WHERE TRIM(student_id) = TRIM(:studentId) AND is_submitted = TRUE');
+        $submissionStmt->execute([':studentId' => $studentId]);
+        if ($submissionStmt->rowCount() === 0) {
+            $conn->rollBack();
+            respond(['success' => false, 'message' => 'No submitted schedule was found to return'], 409);
+        }
+
+        $plottingStmt = $conn->prepare("UPDATE plotting SET status = 'Enrolled' WHERE TRIM(student_id) = TRIM(:studentId)");
+        $plottingStmt->execute([':studentId' => $studentId]);
+        $conn->commit();
+        respond(['success' => true, 'message' => 'Schedule returned successfully']);
+    }
+
+    if (($data['action'] ?? '') === 'delete') {
+        $id = $data['id'] ?? null;
+        if (!is_numeric($id)) {
+            respond(['success' => false, 'message' => 'A valid ID is required'], 400);
+        }
+
+        $conn->beginTransaction();
+        if ($resource === 'sections') {
+            $stmt = $conn->prepare('DELETE FROM offering WHERE schedule_id IN (SELECT schedule_id FROM schedule WHERE section_id = :id)');
+            $stmt->execute([':id' => $id]);
+            $stmt = $conn->prepare('DELETE FROM schedule WHERE section_id = :id');
+            $stmt->execute([':id' => $id]);
+            $stmt = $conn->prepare('DELETE FROM section WHERE section_id = :id');
+            $stmt->execute([':id' => $id]);
+        } elseif ($resource === 'subjects') {
+            $stmt = $conn->prepare('DELETE FROM offering WHERE subject_id = :id');
+            $stmt->execute([':id' => $id]);
+            $stmt = $conn->prepare('DELETE FROM section WHERE subject_id = :id');
+            $stmt->execute([':id' => $id]);
+            $stmt = $conn->prepare('DELETE FROM subject WHERE subject_id = :id');
+            $stmt->execute([':id' => $id]);
+        } elseif ($resource === 'instructors') {
+            $lockInstructor = $conn->prepare('SELECT instructor_id FROM instructor WHERE instructor_id = :id FOR UPDATE');
+            $lockInstructor->execute([':id' => (int) $id]);
+            if (!$lockInstructor->fetchColumn()) {
+                $conn->rollBack();
+                respond(['success' => false, 'message' => 'Instructor not found'], 404);
+            }
+            $clearAssignments = $conn->prepare('UPDATE offering SET instructor_id = NULL WHERE instructor_id = :id');
+            $clearAssignments->execute([':id' => (int) $id]);
+            $stmt = $conn->prepare('DELETE FROM instructor WHERE instructor_id = :id');
+            $stmt->execute([':id' => (int) $id]);
+            if ($stmt->rowCount() === 0) {
+                $conn->rollBack();
+                respond(['success' => false, 'message' => 'Instructor not found'], 404);
+            }
+        } else {
+            $conn->rollBack();
+            respond(['success' => false, 'message' => 'Unknown delete resource'], 404);
+        }
+        $conn->commit();
+        respond(['success' => true]);
+    }
+
+    if ($resource === 'admin') {
+        $action = (string) ($data['action'] ?? '');
+
+        if ($action === 'login') {
+            $username = trim((string) ($data['username'] ?? ''));
+            $password = (string) ($data['password'] ?? '');
+
+            if ($username === '' || $password === '') {
+                respond(['success' => false, 'message' => 'Username and password are required'], 400);
+            }
+
+            $stmt = $conn->prepare('SELECT admin_id, username, password_hash, display_name, role, is_active FROM admin_account WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+            $stmt->execute([':username' => $username]);
+            $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$admin || !filter_var($admin['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                respond(['success' => false, 'message' => 'Invalid admin username or password'], 401);
+            }
+
+            if (!password_verify($password, $admin['password_hash'])) {
+                respond(['success' => false, 'message' => 'Invalid admin username or password'], 401);
+            }
+
+            unset($admin['password_hash']);
+            respond(['success' => true, 'admin' => $admin]);
+        }
+
+        if ($action === 'changePassword') {
+            $username = trim((string) ($data['username'] ?? ''));
+            $currentPassword = (string) ($data['currentPassword'] ?? '');
+            $newPassword = (string) ($data['newPassword'] ?? '');
+
+            if ($username === '' || $currentPassword === '' || $newPassword === '') {
+                respond(['success' => false, 'message' => 'Current password and new password are required'], 400);
+            }
+
+            if (strlen($newPassword) < 10) {
+                respond(['success' => false, 'message' => 'New password must be at least 10 characters'], 400);
+            }
+
+            $stmt = $conn->prepare('SELECT admin_id, username, password_hash, is_active FROM admin_account WHERE LOWER(username) = LOWER(:username) LIMIT 1 FOR UPDATE');
+            $stmt->execute([':username' => $username]);
+            $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$admin || !filter_var($admin['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                respond(['success' => false, 'message' => 'Admin account not found or inactive'], 401);
+            }
+
+            if (!password_verify($currentPassword, $admin['password_hash'])) {
+                respond(['success' => false, 'message' => 'Current password is incorrect'], 401);
+            }
+
+            $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $update = $conn->prepare('UPDATE admin_account SET password_hash = :password_hash WHERE admin_id = :admin_id');
+            $update->execute([':password_hash' => $newHash, ':admin_id' => (int) $admin['admin_id']]);
+
+            respond(['success' => true, 'message' => 'Password updated successfully']);
+        }
+
+        if ($action === 'listAccounts') {
+            requireSuperAdmin($conn, $data);
+            $stmt = $conn->query("SELECT admin_id AS id, username, display_name AS \"displayName\", is_active AS \"isActive\", created_at AS \"createdAt\" FROM admin_account WHERE role = 'admin' ORDER BY LOWER(username), admin_id");
+            respond(['success' => true, 'accounts' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        }
+
+        if ($action === 'createAccount') {
+            requireSuperAdmin($conn, $data);
+            $username = trim((string) ($data['username'] ?? ''));
+            $displayName = trim((string) ($data['displayName'] ?? ''));
+            $password = (string) ($data['password'] ?? '');
+            if ($username === '' || $displayName === '' || $password === '') {
+                respond(['success' => false, 'message' => 'Username, display name, and password are required'], 400);
+            }
+            if (strlen($username) > 50 || strlen($displayName) > 100) {
+                respond(['success' => false, 'message' => 'Username must be at most 50 characters and display name at most 100 characters'], 400);
+            }
+            if (strlen($password) < 10) {
+                respond(['success' => false, 'message' => 'Admin password must be at least 10 characters'], 400);
+            }
+
+            $existing = $conn->prepare('SELECT 1 FROM admin_account WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+            $existing->execute([':username' => $username]);
+            if ($existing->fetchColumn()) {
+                respond(['success' => false, 'message' => 'That username is already in use'], 409);
+            }
+
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $conn->prepare("INSERT INTO admin_account (username, password_hash, display_name, role, is_active) VALUES (:username, :password_hash, :display_name, 'admin', TRUE) RETURNING admin_id");
+            $stmt->execute([
+                ':username' => $username,
+                ':password_hash' => $passwordHash,
+                ':display_name' => $displayName,
+            ]);
+            respond(['success' => true, 'id' => (int) $stmt->fetchColumn(), 'message' => 'Admin account created']);
+        }
+
+        if ($action === 'deleteAccount') {
+            requireSuperAdmin($conn, $data);
+            $adminId = $data['adminId'] ?? null;
+            if (!is_numeric($adminId)) {
+                respond(['success' => false, 'message' => 'A valid admin account ID is required'], 400);
+            }
+
+            $stmt = $conn->prepare("DELETE FROM admin_account WHERE admin_id = :admin_id AND role = 'admin'");
+            $stmt->execute([':admin_id' => (int) $adminId]);
+            if ($stmt->rowCount() === 0) {
+                respond(['success' => false, 'message' => 'Admin account not found'], 404);
+            }
+            respond(['success' => true, 'message' => 'Admin account removed']);
+        }
+
+        respond(['success' => false, 'message' => 'Unknown admin action'], 400);
+    }
+
+    if ($resource === 'instructors') {
+        $name = trim((string) ($data['name'] ?? $data['instructor_name'] ?? $data['instructorName'] ?? ''));
+        if ($name === '') {
+            respond(['success' => false, 'message' => 'Instructor name is required'], 400);
+        }
+
+        $stmt = $conn->prepare('SELECT instructor_id AS id, instructor_name AS name FROM instructor WHERE LOWER(TRIM(instructor_name)) = LOWER(TRIM(:name)) LIMIT 1');
+        $stmt->execute([':name' => $name]);
+        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($existing) {
+            respond(['success' => true, 'id' => (int) $existing['id'], 'name' => $existing['name']]);
+        }
+
+        $insert = $conn->prepare('INSERT INTO instructor (instructor_name) VALUES (:name) RETURNING instructor_id');
+        $insert->execute([':name' => $name]);
+        $id = (int) $insert->fetchColumn();
+        respond(['success' => true, 'id' => $id, 'name' => $name]);
+    }
+
+    if ($resource === 'subjects') {
+        $code = trim((string) ($data['code'] ?? ''));
+        $name = trim((string) ($data['name'] ?? ''));
+        $yearLevel = (int) ($data['yearLevel'] ?? 1);
+        $semester = (int) ($data['semester'] ?? 1);
+        if ($code === '' || $name === '') {
+            respond(['success' => false, 'message' => 'Subject code and name are required'], 400);
+        }
+        if ($yearLevel < 1 || $yearLevel > 5) {
+            respond(['success' => false, 'message' => 'Year level must be between 1 and 5'], 400);
+        }
+        if (!in_array($semester, [1, 2], true)) {
+            respond(['success' => false, 'message' => 'Semester must be 1 or 2'], 400);
+        }
+        if (strlen($code) > 10) {
+            respond(['success' => false, 'message' => 'Subject code must be 10 characters or fewer'], 400);
+        }
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $stmt = $conn->prepare('UPDATE subject SET subject_code = :code, subject_name = :name, year_level = :year_level, semester = :semester WHERE subject_id = :id');
+            $stmt->execute([':id' => $data['id'], ':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
+            $id = (int) $data['id'];
+        } else {
+            $stmt = $conn->prepare('INSERT INTO subject (subject_code, subject_name, year_level, semester) VALUES (:code, :name, :year_level, :semester) RETURNING subject_id');
+            $stmt->execute([':code' => $code, ':name' => $name, ':year_level' => $yearLevel, ':semester' => $semester]);
+            $id = (int) $stmt->fetchColumn();
+        }
+        respond(['success' => true, 'id' => $id, 'code' => $code, 'name' => $name, 'yearLevel' => $yearLevel, 'semester' => $semester]);
+    }
+
+    if ($resource === 'students' && ($data['action'] ?? '') === 'setSemester') {
+        $semester = (int) ($data['semester'] ?? 0);
+        if (!in_array($semester, [1, 2], true)) {
+            respond(['success' => false, 'message' => 'Semester must be 1 or 2'], 400);
+        }
+        $conn->beginTransaction();
+        $clearSchedules = $conn->prepare('DELETE FROM plotting');
+        $clearSchedules->execute();
+        $stmt = $conn->prepare('UPDATE account SET semester = :semester');
+        $stmt->execute([':semester' => $semester]);
+        $conn->commit();
+        respond(['success' => true, 'semester' => $semester, 'updated' => $stmt->rowCount()]);
+    }
+
+    if ($resource === 'sections' && array_key_exists('classes', $data)) {
+        $subjectId = $data['subjectId'] ?? $data['subject_id'] ?? null;
+        $sectionName = trim((string) ($data['type'] ?? ''));
+        $capacity = (int) ($data['maxCapacity'] ?? 0);
+        $classes = is_array($data['classes']) ? $data['classes'] : [];
+        if (!is_numeric($subjectId) || $sectionName === '' || $capacity < 1) {
+            respond(['success' => false, 'message' => 'Section name, subject, and capacity are required'], 400);
+        }
+        foreach ($classes as $classIndex => $class) {
+            $classDays = is_array($class['days'] ?? null) ? $class['days'] : [];
+            $classStart = (string) ($class['start'] ?? '');
+            $classEnd = (string) ($class['end'] ?? '');
+            if (count($classDays) !== 1) {
+                respond(['success' => false, 'message' => 'Each class must have exactly one day'], 400);
+            }
+            foreach (array_slice($classes, $classIndex + 1) as $otherClass) {
+                $otherDays = is_array($otherClass['days'] ?? null) ? $otherClass['days'] : [];
+                $otherStart = (string) ($otherClass['start'] ?? '');
+                $otherEnd = (string) ($otherClass['end'] ?? '');
+                $sameDay = array_intersect($classDays, $otherDays);
+                if ($sameDay && $classStart < $otherEnd && $otherStart < $classEnd) {
+                    respond(['success' => false, 'message' => 'Schedule conflict: two classes in this section overlap on ' . implode(', ', $sameDay)], 409);
+                }
+            }
+        }
+
+        $conn->beginTransaction();
+        $sectionId = null;
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $sectionId = (int) $data['id'];
+            $stmt = $conn->prepare('UPDATE section SET section_name = :name, subject_id = :subject, max_capacity = :capacity WHERE section_id = :id');
+            $stmt->execute([':id' => $sectionId, ':name' => $sectionName, ':subject' => $subjectId, ':capacity' => $capacity]);
+        } else {
+            $stmt = $conn->prepare('SELECT section_id FROM section WHERE subject_id = :subject AND LOWER(TRIM(section_name)) = LOWER(TRIM(:name)) LIMIT 1');
+            $stmt->execute([':subject' => $subjectId, ':name' => $sectionName]);
+            $sectionId = (int) $stmt->fetchColumn();
+            if (!$sectionId) {
+                $stmt = $conn->prepare('INSERT INTO section (section_name, subject_id, max_capacity, is_open) VALUES (:name, :subject, :capacity, :is_open) RETURNING section_id');
+                $stmt->bindValue(':name', $sectionName);
+                $stmt->bindValue(':subject', (int) $subjectId, PDO::PARAM_INT);
+                $stmt->bindValue(':capacity', $capacity, PDO::PARAM_INT);
+                $stmt->bindValue(':is_open', (bool) ($data['isOpen'] ?? false), PDO::PARAM_BOOL);
+                $stmt->execute();
+                $sectionId = (int) $stmt->fetchColumn();
+            }
+        }
+
+        $stmt = $conn->prepare('DELETE FROM offering WHERE offering_id IN (SELECT o.offering_id FROM offering o JOIN schedule sc ON sc.schedule_id = o.schedule_id WHERE sc.section_id = :section_schedule) OR section_id = :section_direct');
+        $stmt->execute([':section_schedule' => $sectionId, ':section_direct' => $sectionId]);
+        $stmt = $conn->prepare('DELETE FROM schedule WHERE section_id = :section');
+        $stmt->execute([':section' => $sectionId]);
+
+        $roomStmt = $conn->prepare('INSERT INTO room (building, room_num) VALUES (:building, :room) RETURNING room_id');
+        $scheduleStmt = $conn->prepare('INSERT INTO schedule (day_of_the_week, start_time, end_time, section_id) VALUES (:day, :start, :end, :section) RETURNING schedule_id');
+        $offeringStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
+        foreach ($classes as $class) {
+            $classType = ucfirst(strtolower(trim((string) ($class['classType'] ?? ''))));
+            $days = is_array($class['days'] ?? null) ? array_values(array_filter($class['days'])) : [];
+            $start = trim((string) ($class['start'] ?? ''));
+            $end = trim((string) ($class['end'] ?? ''));
+            $instructor = trim((string) ($class['instructor'] ?? ''));
+            if (!in_array($classType, ['Lecture', 'Lab'], true) || !$days || $start === '' || $end === '' || $start >= $end || $instructor === '') {
+                $conn->rollBack();
+                respond(['success' => false, 'message' => 'Each class slot needs a valid type, day, time, and instructor'], 400);
+            }
+            $instructorId = getOrCreateInstructorId($conn, $instructor);
+            $roomId = null;
+            if (!empty($class['room'])) {
+                $parts = array_map('trim', explode(',', $class['room'], 2));
+                $roomStmt->execute([':building' => $parts[0], ':room' => $parts[1] ?? '']);
+                $roomId = (int) $roomStmt->fetchColumn();
+            }
+            foreach ($days as $day) {
+                $scheduleStmt->execute([':day' => $day, ':start' => $start, ':end' => $end, ':section' => $sectionId]);
+                $offeringStmt->execute([':subject' => $subjectId, ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $capacity, ':schedule' => $scheduleStmt->fetchColumn(), ':section' => $sectionId, ':class_type' => $classType]);
+            }
+        }
+        $conn->commit();
+        respond(['success' => true, 'id' => $sectionId]);
+    }
+
+    if ($resource === 'sections') {
+        if (($data['action'] ?? '') === 'toggle') {
+            $sectionId = $data['id'] ?? null;
+            $isOpen = filter_var($data['isOpen'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if (!is_numeric($sectionId) || $isOpen === null) {
+                respond(['success' => false, 'message' => 'A valid section ID and open state are required'], 400);
+            }
+
+            if ($isOpen) {
+                $classStmt = $conn->prepare('SELECT 1 FROM offering o JOIN schedule sc ON sc.schedule_id = o.schedule_id WHERE sc.section_id = :section AND (o.section_id = :offering_section OR o.section_id IS NULL) LIMIT 1');
+                $classStmt->execute([':section' => (int)$sectionId, ':offering_section' => (int)$sectionId]);
+                if (!$classStmt->fetchColumn()) {
+                    respond(['success' => false, 'message' => 'Cannot open a section without at least one class'], 409);
+                }
+            }
+
+            $stmt = $conn->prepare('UPDATE section SET is_open = :is_open WHERE section_id = :id');
+            $stmt->bindValue(':id', (int)$sectionId, PDO::PARAM_INT);
+            $stmt->bindValue(':is_open', $isOpen, PDO::PARAM_BOOL);
+            $stmt->execute();
+            if ($stmt->rowCount() === 0) {
+                $exists = $conn->prepare('SELECT 1 FROM section WHERE section_id = :id');
+                $exists->execute([':id' => (int)$sectionId]);
+                if (!$exists->fetchColumn()) {
+                    respond(['success' => false, 'message' => 'Section not found'], 404);
+                }
+            }
+            respond(['success' => true, 'id' => (int)$sectionId, 'isOpen' => $isOpen]);
+        }
+
+        if (empty($data['subjectId']) && !empty($data['subject_id'])) {
+            $data['subjectId'] = $data['subject_id'];
+        }
+        foreach (['type', 'subjectId', 'instructor', 'start', 'end'] as $required) {
+            if (empty($data[$required])) {
+                respond(['success' => false, 'message' => "Missing section field: $required"], 400);
+            }
+        }
+        $classType = ucfirst(strtolower(trim((string) ($data['classType'] ?? 'Lecture'))));
+        if (!in_array($classType, ['Lecture', 'Lab'], true)) {
+            respond(['success' => false, 'message' => 'Class type must be Lecture or Lab'], 400);
+        }
+        $conn->beginTransaction();
+
+        if (!empty($data['id']) && is_numeric($data['id'])) {
+            $sectionId = (int) $data['id'];
+            $stmt = $conn->prepare('UPDATE section SET section_name = :name, subject_id = :subject WHERE section_id = :id');
+            $stmt->execute([':id' => $sectionId, ':name' => $data['type'], ':subject' => $data['subjectId']]);
+
+            // Rebuild the section's schedules so edited days and times replace the old values.
+            $stmt = $conn->prepare('DELETE FROM offering WHERE offering_id IN (SELECT o.offering_id FROM offering o JOIN schedule sc ON sc.schedule_id = o.schedule_id WHERE sc.section_id = :section AND o.class_type = :class_type)');
+            $stmt->execute([':section' => $sectionId, ':class_type' => $classType]);
+            $stmt = $conn->prepare('DELETE FROM schedule sc WHERE sc.section_id = :section AND NOT EXISTS (SELECT 1 FROM offering o WHERE o.schedule_id = sc.schedule_id)');
+            $stmt->execute([':section' => $sectionId]);
+        } else {
+            $stmt = $conn->prepare('SELECT section_id FROM section WHERE subject_id = :subject AND LOWER(TRIM(section_name)) = LOWER(TRIM(:name)) ORDER BY section_id LIMIT 1');
+            $stmt->execute([':subject' => $data['subjectId'], ':name' => $data['type']]);
+            $sectionId = (int) $stmt->fetchColumn();
+            if (!$sectionId) {
+                $stmt = $conn->prepare('INSERT INTO section (section_name, subject_id) VALUES (:name, :subject) RETURNING section_id');
+                $stmt->execute([':name' => $data['type'], ':subject' => $data['subjectId']]);
+                $sectionId = (int) $stmt->fetchColumn();
+            }
+        }
+
+        $instructorId = getOrCreateInstructorId($conn, $data['instructor']);
+
+        $roomId = null;
+        if (!empty($data['room'])) {
+            $parts = array_map('trim', explode(',', $data['room'], 2));
+            $roomStmt = $conn->prepare('INSERT INTO room (building, room_num) VALUES (:building, :room) RETURNING room_id');
+            $roomStmt->execute([':building' => $parts[0], ':room' => $parts[1] ?? '']);
+            $roomId = (int) $roomStmt->fetchColumn();
+        }
+
+        $days = is_array($data['days'] ?? null) ? $data['days'] : [$data['days'] ?? ''];
+        $scheduleStmt = $conn->prepare('SELECT schedule_id FROM schedule WHERE section_id = :section AND day_of_the_week = :day AND start_time = :start AND end_time = :end LIMIT 1');
+        $insertScheduleStmt = $conn->prepare('INSERT INTO schedule (day_of_the_week, start_time, end_time, section_id) VALUES (:day, :start, :end, :section) RETURNING schedule_id');
+        $findOfferingStmt = $conn->prepare('SELECT o.offering_id FROM offering o WHERE o.schedule_id = :schedule AND o.class_type = :class_type LIMIT 1');
+        $updateOfferingStmt = $conn->prepare('UPDATE offering SET subject_id = :subject, room_id = :room, instructor_id = :instructor, max_capacity = :capacity, schedule_id = :schedule, section_id = :section, class_type = :class_type WHERE offering_id = :id');
+        $insertOfferingStmt = $conn->prepare('INSERT INTO offering (subject_id, room_id, instructor_id, max_capacity, schedule_id, section_id, class_type) VALUES (:subject, :room, :instructor, :capacity, :schedule, :section, :class_type)');
+        foreach (array_filter($days) as $day) {
+            $scheduleStmt->execute([':day' => $day, ':start' => $data['start'], ':end' => $data['end'], ':section' => $sectionId]);
+            $scheduleId = (int) $scheduleStmt->fetchColumn();
+            if (!$scheduleId) {
+                $insertScheduleStmt->execute([':day' => $day, ':start' => $data['start'], ':end' => $data['end'], ':section' => $sectionId]);
+                $scheduleId = (int) $insertScheduleStmt->fetchColumn();
+            }
+
+            $findOfferingStmt->execute([':schedule' => $scheduleId, ':class_type' => $classType]);
+            $offeringId = $findOfferingStmt->fetchColumn();
+        if ($offeringId) {
+            $updateOfferingStmt->execute([':id' => $offeringId, ':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
+        } else {
+            $insertOfferingStmt->execute([':subject' => $data['subjectId'], ':room' => $roomId, ':instructor' => $instructorId, ':capacity' => $data['maxCapacity'] ?? 0, ':schedule' => $scheduleId, ':section' => $sectionId, ':class_type' => $classType]);
+        }
+        }
+        $conn->commit();
+        respond(['success' => true, 'id' => $sectionId]);
+    }
+
+    if ($resource === 'offerings') {
+        $subjectId = $data['subjectId'] ?? null;
+        $sectionId = $data['sectionId'] ?? null;
+        $capacity = (int) ($data['maxCapacity'] ?? 0);
+        if (!is_numeric($subjectId) || !is_numeric($sectionId)) {
+            respond(['success' => false, 'message' => 'Subject and section IDs are required'], 400);
+        }
+
+        $conn->beginTransaction();
+        $scheduleStmt = $conn->prepare('SELECT sc.schedule_id FROM schedule sc JOIN section s ON s.section_id = sc.section_id WHERE sc.section_id = :section AND s.subject_id = :subject ORDER BY sc.schedule_id LIMIT 1');
+        $scheduleStmt->execute([':section' => $sectionId, ':subject' => $subjectId]);
+        $scheduleId = $scheduleStmt->fetchColumn();
+        if (!$scheduleId) {
+            $conn->rollBack();
+            respond(['success' => false, 'message' => 'The section has no schedule yet'], 400);
+        }
+
+        $offeringStmt = $conn->prepare('SELECT offering_id FROM offering WHERE subject_id = :subject AND schedule_id = :schedule LIMIT 1');
+        $offeringStmt->execute([':subject' => $subjectId, ':schedule' => $scheduleId]);
+        $offeringId = $offeringStmt->fetchColumn();
+        if ($offeringId) {
+            $updateStmt = $conn->prepare('UPDATE offering SET max_capacity = :capacity, section_id = :section WHERE offering_id = :id');
+            $updateStmt->execute([':capacity' => $capacity, ':section' => $sectionId, ':id' => $offeringId]);
+        } else {
+            $insertStmt = $conn->prepare('INSERT INTO offering (subject_id, max_capacity, schedule_id, section_id) VALUES (:subject, :capacity, :schedule, :section) RETURNING offering_id');
+            $insertStmt->execute([':subject' => $subjectId, ':capacity' => $capacity, ':schedule' => $scheduleId, ':section' => $sectionId]);
+            $offeringId = $insertStmt->fetchColumn();
+        }
+        $conn->commit();
+        respond(['success' => true, 'id' => (int) $offeringId]);
+    }
+
+    if ($resource === 'students') {
+        respond(['success' => false, 'message' => 'Student accounts are managed through student registration only'], 403);
+    }
+
+    respond(['success' => false, 'message' => 'Unknown resource'], 404);
+} catch (Throwable $e) {
+    if ($conn->inTransaction()) {
+        $conn->rollBack();
+    }
+    respond(['success' => false, 'message' => $e->getMessage()], 500);
+}
+?>

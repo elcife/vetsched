@@ -97,6 +97,10 @@ class ProfileFragment : Fragment() {
         binding.btnResetSchedule.setOnClickListener {
             showResetScheduleWarning()
         }
+
+        binding.swipeRefresh.setOnRefreshListener {
+            binding.swipeRefresh.isRefreshing = false
+        }
     }
 
     private fun Int.ordinalSuffix(): String = when (this) {
